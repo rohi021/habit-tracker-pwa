@@ -5073,8 +5073,10 @@
         }, [state.assignments]);
         
         const upcomingExams = useMemo(() => {
+            const todayStart = new Date();
+            todayStart.setHours(0, 0, 0, 0);
             return state.assignments
-                .filter(a => a.type === 'exam' && a.status !== 'completed' && new Date(a.dueDate) >= new Date(new Date().setHours(0,0,0,0)))
+                .filter(a => a.type === 'exam' && a.status !== 'completed' && new Date(a.dueDate) >= todayStart)
                 .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
         }, [state.assignments]);
         
@@ -5164,7 +5166,11 @@
                         </div>
                         <div className="space-y-2">
                             {upcomingExams.slice(0, 3).map(exam => {
-                                const daysLeft = Math.ceil((new Date(exam.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+                                const examDate = new Date(exam.dueDate);
+                                examDate.setHours(0, 0, 0, 0);
+                                const now = new Date();
+                                now.setHours(0, 0, 0, 0);
+                                const daysLeft = Math.ceil((examDate - now) / (1000 * 60 * 60 * 24));
                                 return (
                                     <div key={exam.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3">
                                         <div className="flex-1 min-w-0">
@@ -5174,7 +5180,7 @@
                                         <div className={`text-sm font-bold ml-3 ${
                                             daysLeft <= 1 ? 'text-rose-400' : daysLeft <= 3 ? 'text-amber-400' : daysLeft <= 7 ? 'text-yellow-400' : 'text-emerald-400'
                                         }`}>
-                                            {daysLeft === 0 ? 'Today!' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft}d`}
+                                            {daysLeft < 0 ? 'Overdue' : daysLeft === 0 ? 'Today!' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft}d`}
                                         </div>
                                     </div>
                                 );
