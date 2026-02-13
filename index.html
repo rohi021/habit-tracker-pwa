@@ -3786,12 +3786,12 @@
     /**
      * Assignment Form Modal
      */
-    const AssignmentModal = memo(({ onClose, assignment = null }) => {
+    const AssignmentModal = memo(({ onClose, assignment = null, defaultType = null }) => {
         const { dispatch } = useApp();
         const [title, setTitle] = useState(assignment?.title || '');
         const [subject, setSubject] = useState(assignment?.subject || 'Math');
         const [dueDate, setDueDate] = useState(assignment?.dueDate || '');
-        const [type, setType] = useState(assignment?.type || 'assignment');
+        const [type, setType] = useState(assignment?.type || defaultType || 'assignment');
         const [priority, setPriority] = useState(assignment?.priority || 'medium');
         
         const handleSubmit = (e) => {
@@ -3829,7 +3829,7 @@
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
                     <h3 className="text-xl font-bold text-white mb-4">
-                        {assignment ? 'Edit Assignment' : 'New Assignment'}
+                        {assignment ? (assignment.type === 'exam' ? 'Edit Exam' : 'Edit Assignment') : (type === 'exam' ? 'New Exam' : 'New Assignment')}
                     </h3>
                     
                     <form onSubmit={handleSubmit} className="space-y-4">
@@ -5072,6 +5072,12 @@
             return pending[0];
         }, [state.assignments]);
         
+        const upcomingExams = useMemo(() => {
+            return state.assignments
+                .filter(a => a.type === 'exam' && a.status !== 'completed' && new Date(a.dueDate) >= new Date(new Date().setHours(0,0,0,0)))
+                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+        }, [state.assignments]);
+        
         const todayWater = state.waterLog[today] || 0;
         const todaySleep = state.sleepLog.find(s => s.date === today);
         
@@ -5148,6 +5154,43 @@
                     </div>
                 </div>
                 
+                {/* Upcoming Exams Reminder */}
+                {upcomingExams.length > 0 && (
+                    <div className="bg-gradient-to-r from-rose-500/10 to-amber-500/10 rounded-xl p-4 border border-rose-500/20 mb-2">
+                        <div className="flex items-center gap-2 mb-3">
+                            <span className="text-lg">🎓</span>
+                            <h3 className="font-bold text-white text-sm">Upcoming Exams</h3>
+                            <span className="text-xs bg-rose-500/20 text-rose-400 px-2 py-0.5 rounded-full ml-auto">{upcomingExams.length}</span>
+                        </div>
+                        <div className="space-y-2">
+                            {upcomingExams.slice(0, 3).map(exam => {
+                                const daysLeft = Math.ceil((new Date(exam.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+                                return (
+                                    <div key={exam.id} className="flex items-center justify-between bg-slate-800/50 rounded-lg p-3">
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium text-white truncate">{exam.title}</div>
+                                            <div className="text-xs text-slate-400">{exam.subject} · {exam.dueDate}</div>
+                                        </div>
+                                        <div className={`text-sm font-bold ml-3 ${
+                                            daysLeft <= 1 ? 'text-rose-400' : daysLeft <= 3 ? 'text-amber-400' : daysLeft <= 7 ? 'text-yellow-400' : 'text-emerald-400'
+                                        }`}>
+                                            {daysLeft === 0 ? 'Today!' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft}d`}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                        {upcomingExams.length > 3 && (
+                            <button 
+                                onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' })}
+                                className="text-xs text-indigo-400 hover:text-indigo-300 mt-2 transition-colors"
+                            >
+                                View all {upcomingExams.length} exams →
+                            </button>
+                        )}
+                    </div>
+                )}
+                
                 {/* Insights Panel */}
                 <InsightsPanel />
                 
@@ -5212,6 +5255,7 @@
         const [showStudyTimer, setShowStudyTimer] = useState(false);
         const [showAssignmentModal, setShowAssignmentModal] = useState(false);
         const [editingAssignment, setEditingAssignment] = useState(null);
+        const [defaultExamType, setDefaultExamType] = useState(false);
         const [showTimetableModal, setShowTimetableModal] = useState(false);
         const [editingTimetableEntry, setEditingTimetableEntry] = useState(null);
         
@@ -5226,7 +5270,14 @@
         // Get pending assignments
         const pendingAssignments = useMemo(() => {
             return state.assignments
-                .filter(a => a.status !== 'completed')
+                .filter(a => a.status !== 'completed' && a.type !== 'exam')
+                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+        }, [state.assignments]);
+        
+        // Get upcoming exams
+        const pendingExams = useMemo(() => {
+            return state.assignments
+                .filter(a => a.type === 'exam' && a.status !== 'completed')
                 .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
         }, [state.assignments]);
         
@@ -5252,10 +5303,11 @@
                 </div>
                 
                 {/* Tab Navigation */}
-                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl">
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl overflow-x-auto">
                     {[
-                        { id: 'timer', label: 'Study Timer', icon: '⏱️' },
-                        { id: 'assignments', label: 'Assignments', icon: '📝' },
+                        { id: 'timer', label: 'Timer', icon: '⏱️' },
+                        { id: 'exams', label: 'Exams', icon: '🎓' },
+                        { id: 'assignments', label: 'Tasks', icon: '📝' },
                         { id: 'timetable', label: 'Timetable', icon: '📅' }
                     ].map(tab => (
                         <button
@@ -5310,12 +5362,111 @@
                     </div>
                 )}
                 
+                {activeTab === 'exams' && (
+                    <div className="space-y-4">
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => {
+                                    setEditingAssignment(null);
+                                    setDefaultExamType(true);
+                                    setShowAssignmentModal(true);
+                                }}
+                                className="px-4 py-2 bg-rose-500 hover:bg-rose-600 text-white rounded-lg font-medium transition-colors"
+                            >
+                                + Add Exam
+                            </button>
+                        </div>
+                        
+                        {pendingExams.length > 0 ? (
+                            <div className="space-y-3">
+                                {pendingExams.map(exam => {
+                                    const daysUntil = getDaysUntil(exam.dueDate);
+                                    return (
+                                        <div key={exam.id} className={`bg-slate-800/50 rounded-xl p-4 border ${
+                                            daysUntil <= 1 ? 'border-rose-500/50' : daysUntil <= 3 ? 'border-amber-500/40' : daysUntil <= 7 ? 'border-yellow-500/30' : 'border-slate-700'
+                                        }`}>
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-lg">🎓</span>
+                                                        <h4 className="text-sm font-semibold text-white">{exam.title}</h4>
+                                                    </div>
+                                                    <div className="text-xs text-slate-400">{exam.subject} · {exam.dueDate}</div>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingAssignment(exam);
+                                                        setDefaultExamType(false);
+                                                        setShowAssignmentModal(true);
+                                                    }}
+                                                    className="text-slate-400 hover:text-white text-sm"
+                                                >
+                                                    Edit
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center justify-between mt-3">
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-xs font-bold px-2 py-1 rounded ${
+                                                        daysUntil <= 0 ? 'bg-rose-500/20 text-rose-400' :
+                                                        daysUntil <= 1 ? 'bg-rose-500/20 text-rose-400' :
+                                                        daysUntil <= 3 ? 'bg-amber-500/20 text-amber-400' :
+                                                        daysUntil <= 7 ? 'bg-yellow-500/20 text-yellow-400' :
+                                                        'bg-emerald-500/20 text-emerald-400'
+                                                    }`}>
+                                                        {daysUntil < 0 ? 'OVERDUE' : daysUntil === 0 ? 'TODAY!' : daysUntil === 1 ? 'TOMORROW' : `${daysUntil} DAYS LEFT`}
+                                                    </span>
+                                                    <span className={`text-xs px-2 py-1 rounded ${
+                                                        exam.priority === 'high' ? 'bg-rose-500/20 text-rose-400' :
+                                                        exam.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' :
+                                                        'bg-slate-500/20 text-slate-400'
+                                                    }`}>
+                                                        {exam.priority}
+                                                    </span>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        dispatch({
+                                                            type: ActionTypes.UPDATE_ASSIGNMENT,
+                                                            payload: { id: exam.id, updates: { status: 'completed' } }
+                                                        });
+                                                        showToast('Exam completed! +50 XP 🎉', 'success');
+                                                    }}
+                                                    className="text-xs px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded transition-colors"
+                                                >
+                                                    Done ✓
+                                                </button>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                                <div className="text-4xl mb-4">🎓</div>
+                                <h3 className="text-lg font-semibold text-white mb-2">No Upcoming Exams</h3>
+                                <p className="text-slate-400 mb-4">Add your exams to get countdown reminders</p>
+                                <button
+                                    onClick={() => {
+                                        setEditingAssignment(null);
+                                        setDefaultExamType(true);
+                                        setShowAssignmentModal(true);
+                                    }}
+                                    className="px-6 py-3 bg-rose-500 hover:bg-rose-600 text-white rounded-xl font-medium transition-colors"
+                                >
+                                    Add Exam
+                                </button>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
                 {activeTab === 'assignments' && (
                     <div className="space-y-4">
                         <div className="flex justify-end">
                             <button
                                 onClick={() => {
                                     setEditingAssignment(null);
+                                    setDefaultExamType(false);
                                     setShowAssignmentModal(true);
                                 }}
                                 className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors"
@@ -5343,6 +5494,7 @@
                                                 <button
                                                     onClick={() => {
                                                         setEditingAssignment(assignment);
+                                                        setDefaultExamType(false);
                                                         setShowAssignmentModal(true);
                                                     }}
                                                     className="text-slate-400 hover:text-white text-sm"
@@ -5472,14 +5624,18 @@
                 )}
                 
                 {/* Quick Stats */}
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-3 gap-3">
                     <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                         <div className="text-2xl font-bold text-indigo-400">{Math.floor(todayStudyTime / 60)}h {todayStudyTime % 60}m</div>
-                        <div className="text-sm text-slate-400">Today's Study Time</div>
+                        <div className="text-xs text-slate-400">Study Today</div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="text-2xl font-bold text-rose-400">{pendingExams.length}</div>
+                        <div className="text-xs text-slate-400">Upcoming Exams</div>
                     </div>
                     <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                         <div className="text-2xl font-bold text-amber-400">{pendingAssignments.length}</div>
-                        <div className="text-sm text-slate-400">Pending Tasks</div>
+                        <div className="text-xs text-slate-400">Pending Tasks</div>
                     </div>
                 </div>
                 
@@ -5488,9 +5644,11 @@
                 {showAssignmentModal && (
                     <AssignmentModal
                         assignment={editingAssignment}
+                        defaultType={defaultExamType ? 'exam' : null}
                         onClose={() => {
                             setShowAssignmentModal(false);
                             setEditingAssignment(null);
+                            setDefaultExamType(false);
                         }}
                     />
                 )}
