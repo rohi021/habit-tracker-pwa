@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-    <meta name="description" content="Production-grade habit tracking with real analytics">
+    <meta name="description" content="Complete student life management platform - study, assignments, expenses, wellness, and more">
     <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     
-    <title>HabitOS | Production-Grade Habit Tracker</title>
+    <title>StudentOS | Complete Student Life Management</title>
     
     <!-- PWA -->
     <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiSGFiaXRPUyIsInNob3J0X25hbWUiOiJIYWJpdE9TIiwic3RhcnRfdXJsIjoiLiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwZjE3MmEiLCJ0aGVtZV9jb2xvciI6IiM2MzY2ZjEifQ==">
@@ -217,9 +217,9 @@
      * @constant
      */
     const CONFIG = Object.freeze({
-        APP_NAME: 'HabitOS',
+        APP_NAME: 'StudentOS',
         VERSION: '2.0.0',
-        STORAGE_KEY: 'habitos-v2',
+        STORAGE_KEY: 'studentos-v2', // Changed from habitos-v2 for migration
         MAX_UNDO_STACK: 30,
         DEBOUNCE_MS: 500,
         MIN_DATA_POINTS_FOR_INSIGHTS: 7,
@@ -240,6 +240,29 @@
             q2: { name: 'Schedule', description: 'Not Urgent but Important', color: 'purple' },
             q3: { name: 'Delegate', description: 'Urgent but Not Important', color: 'amber' },
             q4: { name: 'Eliminate', description: 'Neither Urgent nor Important', color: 'slate' },
+        }),
+        // XP and Level System
+        XP_PER_LEVEL: 100, // Level = sqrt(XP / 100) + 1
+        MAX_LEVEL: 50,
+        LEVEL_TITLES: Object.freeze({
+            1: 'Freshman',
+            5: 'Student',
+            10: 'Scholar',
+            15: 'Achiever',
+            20: 'Expert',
+            25: 'Master',
+            30: 'Sage',
+            35: 'Virtuoso',
+            40: 'Legend',
+            50: 'Valedictorian'
+        }),
+        // Mood emojis
+        MOODS: Object.freeze({
+            veryHappy: '😄',
+            happy: '😊',
+            neutral: '😐',
+            sad: '😔',
+            verySad: '😢'
         }),
     });
 
@@ -925,7 +948,7 @@
      * Initial application state
      */
     const createInitialState = () => ({
-        // Core data
+        // Core data - Habits (existing)
         habits: {},
         habitOrder: [],
         
@@ -934,7 +957,7 @@
         selectedHabit: null,
         isLoading: true,
         
-        // Focus mode
+        // Focus mode (existing - now part of study)
         focusMode: {
             active: false,
             habitId: null,
@@ -942,17 +965,60 @@
             duration: 25 * 60 // 25 minutes default
         },
         
-        // Gamification
+        // ===== NEW: Study Session Tracker =====
+        studySessions: [], // { id, subject, startTime, endTime, duration, notes, date, type: 'regular'|'pomodoro' }
+        studyGoal: { daily: 120, weekly: 600 }, // minutes
+        subjects: ['Math', 'Science', 'English', 'History', 'Computer Science', 'Literature', 'Physics', 'Chemistry', 'Biology', 'Other'],
+        activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime }
+        
+        // ===== NEW: Assignments & Exams =====
+        assignments: [], // { id, title, subject, dueDate, priority, status, grade, type: 'assignment'|'exam', prepProgress, topics, createdAt }
+        
+        // ===== NEW: Expenses =====
+        expenses: [], // { id, amount, category, description, date }
+        monthlyBudget: 5000,
+        expenseCategories: ['Food', 'Transport', 'Books', 'Entertainment', 'Subscriptions', 'Health', 'Other'],
+        
+        // ===== NEW: Sleep & Wellness =====
+        sleepLog: [], // { id, date, bedtime, wakeTime, hours, quality }
+        waterLog: {}, // { [dateKey]: glasses }
+        exerciseLog: [], // { id, date, type, duration, notes }
+        moodLog: {}, // { [dateKey]: { mood, energy, note } }
+        waterGoal: 8, // glasses per day
+        sleepGoal: 8, // hours per night
+        
+        // ===== NEW: Goals with Milestones =====
+        goals: [], // { id, title, description, category, targetDate, milestones: [{text, done}], createdAt }
+        goalCategories: ['Academic', 'Health', 'Financial', 'Personal', 'Career'],
+        
+        // ===== NEW: Timetable =====
+        timetable: [], // { id, subject, day, startTime, endTime, room, color, notes }
+        
+        // ===== NEW: Journal =====
+        journalEntries: [], // { id, date, content, mood, energy, gratitude, tags, wordCount }
+        
+        // ===== Gamification (Enhanced) =====
         streakFreezes: 2,
         totalPoints: 0,
+        xp: 0,
+        level: 1,
+        achievements: [], // earned achievement IDs
+        dailyChallenges: [], // { id, text, type, target, progress, completed, date, xpReward }
         
-        // Settings
+        // Settings (Enhanced)
         settings: {
             theme: 'dark',
             soundEnabled: true,
             hapticEnabled: true,
             reminderTime: '21:00',
-            weekStartsOn: 0 // 0 = Sunday
+            weekStartsOn: 0, // 0 = Sunday
+            // New settings
+            studyReminderEnabled: true,
+            dailyStudyGoal: 120, // minutes
+            monthlyBudget: 5000,
+            waterGoal: 8,
+            sleepGoal: 8,
+            journalReminderEnabled: true
         },
         
         // Undo/Redo
@@ -960,27 +1026,73 @@
         redoStack: [],
         
         // Meta
-        lastSyncedAt: null
+        lastSyncedAt: null,
+        appVersion: '2.0.0' // Updated for StudentOS
     });
 
     /**
      * Action types enum
      */
     const ActionTypes = Object.freeze({
-        // Habit actions
+        // Habit actions (existing)
         ADD_HABIT: 'ADD_HABIT',
         UPDATE_HABIT: 'UPDATE_HABIT',
         DELETE_HABIT: 'DELETE_HABIT',
         TOGGLE_HABIT: 'TOGGLE_HABIT',
         REORDER_HABITS: 'REORDER_HABITS',
         
-        // Focus mode
+        // Focus mode (existing)
         START_FOCUS: 'START_FOCUS',
         END_FOCUS: 'END_FOCUS',
         
-        // Gamification
+        // Study Session Tracker
+        START_STUDY_SESSION: 'START_STUDY_SESSION',
+        END_STUDY_SESSION: 'END_STUDY_SESSION',
+        DELETE_STUDY_SESSION: 'DELETE_STUDY_SESSION',
+        UPDATE_STUDY_GOAL: 'UPDATE_STUDY_GOAL',
+        
+        // Assignments & Exams
+        ADD_ASSIGNMENT: 'ADD_ASSIGNMENT',
+        UPDATE_ASSIGNMENT: 'UPDATE_ASSIGNMENT',
+        DELETE_ASSIGNMENT: 'DELETE_ASSIGNMENT',
+        
+        // Expenses
+        ADD_EXPENSE: 'ADD_EXPENSE',
+        UPDATE_EXPENSE: 'UPDATE_EXPENSE',
+        DELETE_EXPENSE: 'DELETE_EXPENSE',
+        SET_MONTHLY_BUDGET: 'SET_MONTHLY_BUDGET',
+        
+        // Wellness
+        LOG_SLEEP: 'LOG_SLEEP',
+        DELETE_SLEEP_LOG: 'DELETE_SLEEP_LOG',
+        LOG_WATER: 'LOG_WATER',
+        LOG_EXERCISE: 'LOG_EXERCISE',
+        DELETE_EXERCISE: 'DELETE_EXERCISE',
+        LOG_MOOD: 'LOG_MOOD',
+        
+        // Goals
+        ADD_GOAL: 'ADD_GOAL',
+        UPDATE_GOAL: 'UPDATE_GOAL',
+        DELETE_GOAL: 'DELETE_GOAL',
+        TOGGLE_MILESTONE: 'TOGGLE_MILESTONE',
+        
+        // Timetable
+        ADD_TIMETABLE_ENTRY: 'ADD_TIMETABLE_ENTRY',
+        UPDATE_TIMETABLE_ENTRY: 'UPDATE_TIMETABLE_ENTRY',
+        DELETE_TIMETABLE_ENTRY: 'DELETE_TIMETABLE_ENTRY',
+        
+        // Journal
+        ADD_JOURNAL_ENTRY: 'ADD_JOURNAL_ENTRY',
+        UPDATE_JOURNAL_ENTRY: 'UPDATE_JOURNAL_ENTRY',
+        DELETE_JOURNAL_ENTRY: 'DELETE_JOURNAL_ENTRY',
+        
+        // Gamification (Enhanced)
         USE_STREAK_FREEZE: 'USE_STREAK_FREEZE',
         ADD_POINTS: 'ADD_POINTS',
+        ADD_XP: 'ADD_XP',
+        EARN_ACHIEVEMENT: 'EARN_ACHIEVEMENT',
+        GENERATE_DAILY_CHALLENGES: 'GENERATE_DAILY_CHALLENGES',
+        COMPLETE_CHALLENGE: 'COMPLETE_CHALLENGE',
         
         // UI
         SET_VIEW: 'SET_VIEW',
@@ -1180,6 +1292,398 @@
                 };
             }
             
+            // ===== STUDY SESSION ACTIONS =====
+            case ActionTypes.START_STUDY_SESSION: {
+                const { subject, type = 'regular' } = payload;
+                return {
+                    ...state,
+                    activeStudySession: {
+                        subject,
+                        startTime: Date.now(),
+                        type,
+                        pomodoroCount: 0,
+                        breakStartTime: null
+                    }
+                };
+            }
+            
+            case ActionTypes.END_STUDY_SESSION: {
+                if (!state.activeStudySession) return state;
+                
+                const session = {
+                    id: crypto.randomUUID(),
+                    subject: state.activeStudySession.subject,
+                    startTime: state.activeStudySession.startTime,
+                    endTime: Date.now(),
+                    duration: Math.floor((Date.now() - state.activeStudySession.startTime) / 1000 / 60), // minutes
+                    notes: payload?.notes || '',
+                    date: DateUtils.toKey(),
+                    type: state.activeStudySession.type,
+                    pomodoroCount: state.activeStudySession.pomodoroCount || 0
+                };
+                
+                const xpEarned = Math.floor(session.duration / 5) * 2; // 2 XP per 5 minutes
+                
+                return {
+                    ...state,
+                    studySessions: [...state.studySessions, session],
+                    activeStudySession: null,
+                    xp: state.xp + xpEarned
+                };
+            }
+            
+            case ActionTypes.DELETE_STUDY_SESSION: {
+                return {
+                    ...state,
+                    studySessions: state.studySessions.filter(s => s.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.UPDATE_STUDY_GOAL: {
+                return {
+                    ...state,
+                    studyGoal: { ...state.studyGoal, ...payload }
+                };
+            }
+            
+            // ===== ASSIGNMENT ACTIONS =====
+            case ActionTypes.ADD_ASSIGNMENT: {
+                const assignment = {
+                    id: crypto.randomUUID(),
+                    ...payload,
+                    createdAt: new Date().toISOString()
+                };
+                return {
+                    ...state,
+                    assignments: [...state.assignments, assignment],
+                    xp: state.xp + 5 // XP for planning
+                };
+            }
+            
+            case ActionTypes.UPDATE_ASSIGNMENT: {
+                const { id, updates } = payload;
+                const updatedAssignments = state.assignments.map(a =>
+                    a.id === id ? { ...a, ...updates } : a
+                );
+                
+                // Award XP for completing assignment
+                const assignment = state.assignments.find(a => a.id === id);
+                let xpGain = 0;
+                if (assignment && updates.status === 'completed' && assignment.status !== 'completed') {
+                    xpGain = assignment.type === 'exam' ? 50 : 30;
+                }
+                
+                return {
+                    ...state,
+                    assignments: updatedAssignments,
+                    xp: state.xp + xpGain
+                };
+            }
+            
+            case ActionTypes.DELETE_ASSIGNMENT: {
+                return {
+                    ...state,
+                    assignments: state.assignments.filter(a => a.id !== payload.id)
+                };
+            }
+            
+            // ===== EXPENSE ACTIONS =====
+            case ActionTypes.ADD_EXPENSE: {
+                const expense = {
+                    id: crypto.randomUUID(),
+                    ...payload,
+                    date: payload.date || DateUtils.toKey()
+                };
+                return {
+                    ...state,
+                    expenses: [...state.expenses, expense],
+                    xp: state.xp + 2 // XP for tracking
+                };
+            }
+            
+            case ActionTypes.UPDATE_EXPENSE: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    expenses: state.expenses.map(e => e.id === id ? { ...e, ...updates } : e)
+                };
+            }
+            
+            case ActionTypes.DELETE_EXPENSE: {
+                return {
+                    ...state,
+                    expenses: state.expenses.filter(e => e.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.SET_MONTHLY_BUDGET: {
+                return {
+                    ...state,
+                    monthlyBudget: payload.budget,
+                    settings: { ...state.settings, monthlyBudget: payload.budget }
+                };
+            }
+            
+            // ===== WELLNESS ACTIONS =====
+            case ActionTypes.LOG_SLEEP: {
+                const sleepEntry = {
+                    id: crypto.randomUUID(),
+                    date: payload.date || DateUtils.toKey(),
+                    bedtime: payload.bedtime,
+                    wakeTime: payload.wakeTime,
+                    hours: payload.hours,
+                    quality: payload.quality
+                };
+                return {
+                    ...state,
+                    sleepLog: [...state.sleepLog, sleepEntry],
+                    xp: state.xp + 5
+                };
+            }
+            
+            case ActionTypes.DELETE_SLEEP_LOG: {
+                return {
+                    ...state,
+                    sleepLog: state.sleepLog.filter(s => s.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.LOG_WATER: {
+                const { date = DateUtils.toKey(), glasses } = payload;
+                return {
+                    ...state,
+                    waterLog: { ...state.waterLog, [date]: glasses },
+                    xp: state.xp + 1
+                };
+            }
+            
+            case ActionTypes.LOG_EXERCISE: {
+                const exercise = {
+                    id: crypto.randomUUID(),
+                    date: payload.date || DateUtils.toKey(),
+                    type: payload.type,
+                    duration: payload.duration,
+                    notes: payload.notes || ''
+                };
+                return {
+                    ...state,
+                    exerciseLog: [...state.exerciseLog, exercise],
+                    xp: state.xp + 10
+                };
+            }
+            
+            case ActionTypes.DELETE_EXERCISE: {
+                return {
+                    ...state,
+                    exerciseLog: state.exerciseLog.filter(e => e.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.LOG_MOOD: {
+                const { date = DateUtils.toKey(), mood, energy, note } = payload;
+                return {
+                    ...state,
+                    moodLog: { ...state.moodLog, [date]: { mood, energy, note } },
+                    xp: state.xp + 3
+                };
+            }
+            
+            // ===== GOAL ACTIONS =====
+            case ActionTypes.ADD_GOAL: {
+                const goal = {
+                    id: crypto.randomUUID(),
+                    ...payload,
+                    milestones: payload.milestones || [],
+                    createdAt: new Date().toISOString()
+                };
+                return {
+                    ...state,
+                    goals: [...state.goals, goal],
+                    xp: state.xp + 15
+                };
+            }
+            
+            case ActionTypes.UPDATE_GOAL: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    goals: state.goals.map(g => g.id === id ? { ...g, ...updates } : g)
+                };
+            }
+            
+            case ActionTypes.DELETE_GOAL: {
+                return {
+                    ...state,
+                    goals: state.goals.filter(g => g.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.TOGGLE_MILESTONE: {
+                const { goalId, milestoneIndex } = payload;
+                const updatedGoals = state.goals.map(goal => {
+                    if (goal.id === goalId) {
+                        const newMilestones = [...goal.milestones];
+                        newMilestones[milestoneIndex] = {
+                            ...newMilestones[milestoneIndex],
+                            done: !newMilestones[milestoneIndex].done
+                        };
+                        return { ...goal, milestones: newMilestones };
+                    }
+                    return goal;
+                });
+                return {
+                    ...state,
+                    goals: updatedGoals,
+                    xp: state.xp + 5
+                };
+            }
+            
+            // ===== TIMETABLE ACTIONS =====
+            case ActionTypes.ADD_TIMETABLE_ENTRY: {
+                const entry = {
+                    id: crypto.randomUUID(),
+                    ...payload
+                };
+                return {
+                    ...state,
+                    timetable: [...state.timetable, entry]
+                };
+            }
+            
+            case ActionTypes.UPDATE_TIMETABLE_ENTRY: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    timetable: state.timetable.map(t => t.id === id ? { ...t, ...updates } : t)
+                };
+            }
+            
+            case ActionTypes.DELETE_TIMETABLE_ENTRY: {
+                return {
+                    ...state,
+                    timetable: state.timetable.filter(t => t.id !== payload.id)
+                };
+            }
+            
+            // ===== JOURNAL ACTIONS =====
+            case ActionTypes.ADD_JOURNAL_ENTRY: {
+                const entry = {
+                    id: crypto.randomUUID(),
+                    date: payload.date || DateUtils.toKey(),
+                    content: payload.content,
+                    mood: payload.mood,
+                    energy: payload.energy,
+                    gratitude: payload.gratitude || '',
+                    tags: payload.tags || [],
+                    wordCount: payload.content.trim().split(/\s+/).length
+                };
+                return {
+                    ...state,
+                    journalEntries: [...state.journalEntries, entry],
+                    xp: state.xp + 10
+                };
+            }
+            
+            case ActionTypes.UPDATE_JOURNAL_ENTRY: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    journalEntries: state.journalEntries.map(e =>
+                        e.id === id ? { ...e, ...updates } : e
+                    )
+                };
+            }
+            
+            case ActionTypes.DELETE_JOURNAL_ENTRY: {
+                return {
+                    ...state,
+                    journalEntries: state.journalEntries.filter(e => e.id !== payload.id)
+                };
+            }
+            
+            // ===== GAMIFICATION ACTIONS =====
+            case ActionTypes.ADD_XP: {
+                const newXP = state.xp + payload.amount;
+                const newLevel = Math.floor(Math.sqrt(newXP / 100)) + 1; // Level formula
+                return {
+                    ...state,
+                    xp: newXP,
+                    level: Math.min(newLevel, 50) // Cap at level 50
+                };
+            }
+            
+            case ActionTypes.EARN_ACHIEVEMENT: {
+                if (state.achievements.includes(payload.id)) return state;
+                return {
+                    ...state,
+                    achievements: [...state.achievements, payload.id],
+                    xp: state.xp + (payload.xpReward || 50)
+                };
+            }
+            
+            case ActionTypes.GENERATE_DAILY_CHALLENGES: {
+                // Clear old challenges if new day
+                const today = DateUtils.toKey();
+                const existingChallenges = state.dailyChallenges.filter(c => c.date === today);
+                
+                if (existingChallenges.length > 0) return state;
+                
+                // Generate 3 daily challenges
+                const challenges = [
+                    {
+                        id: crypto.randomUUID(),
+                        text: 'Study for 2 hours today',
+                        type: 'study',
+                        target: 120,
+                        progress: 0,
+                        completed: false,
+                        date: today,
+                        xpReward: 30
+                    },
+                    {
+                        id: crypto.randomUUID(),
+                        text: 'Drink 8 glasses of water',
+                        type: 'water',
+                        target: 8,
+                        progress: 0,
+                        completed: false,
+                        date: today,
+                        xpReward: 20
+                    },
+                    {
+                        id: crypto.randomUUID(),
+                        text: 'Complete 3 habits',
+                        type: 'habits',
+                        target: 3,
+                        progress: 0,
+                        completed: false,
+                        date: today,
+                        xpReward: 25
+                    }
+                ];
+                
+                return {
+                    ...state,
+                    dailyChallenges: challenges
+                };
+            }
+            
+            case ActionTypes.COMPLETE_CHALLENGE: {
+                const { id } = payload;
+                const challenge = state.dailyChallenges.find(c => c.id === id);
+                if (!challenge || challenge.completed) return state;
+                
+                const updatedChallenges = state.dailyChallenges.map(c =>
+                    c.id === id ? { ...c, completed: true } : c
+                );
+                
+                return {
+                    ...state,
+                    dailyChallenges: updatedChallenges,
+                    xp: state.xp + challenge.xpReward
+                };
+            }
+            
             case ActionTypes.LOAD_STATE: {
                 return {
                     ...state,
@@ -1218,11 +1722,36 @@
             timeoutRef.current = setTimeout(() => {
                 try {
                     const toSave = {
+                        // Existing fields
                         habits: state.habits,
                         habitOrder: state.habitOrder,
                         settings: state.settings,
                         streakFreezes: state.streakFreezes,
-                        totalPoints: state.totalPoints
+                        totalPoints: state.totalPoints,
+                        
+                        // New fields for StudentOS
+                        studySessions: state.studySessions,
+                        studyGoal: state.studyGoal,
+                        subjects: state.subjects,
+                        assignments: state.assignments,
+                        expenses: state.expenses,
+                        monthlyBudget: state.monthlyBudget,
+                        expenseCategories: state.expenseCategories,
+                        sleepLog: state.sleepLog,
+                        waterLog: state.waterLog,
+                        exerciseLog: state.exerciseLog,
+                        moodLog: state.moodLog,
+                        waterGoal: state.waterGoal,
+                        sleepGoal: state.sleepGoal,
+                        goals: state.goals,
+                        goalCategories: state.goalCategories,
+                        timetable: state.timetable,
+                        journalEntries: state.journalEntries,
+                        xp: state.xp,
+                        level: state.level,
+                        achievements: state.achievements,
+                        dailyChallenges: state.dailyChallenges,
+                        appVersion: state.appVersion
                     };
                     localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(toSave));
                 } catch (e) {
