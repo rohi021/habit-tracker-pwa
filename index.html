@@ -3079,6 +3079,375 @@
         );
     });
 
+    /**
+     * Wellness Tracker Modal - Log sleep, water, exercise, mood
+     */
+    const WellnessModal = memo(({ type, onClose }) => {
+        const { state, dispatch } = useApp();
+        const today = DateUtils.toKey();
+        const [formData, setFormData] = useState(() => {
+            if (type === 'sleep') return { bedtime: '', wakeTime: '', quality: 3 };
+            if (type === 'water') return { glasses: state.waterLog[today] || 0 };
+            if (type === 'exercise') return { type: 'walk', duration: 30, notes: '' };
+            if (type === 'mood') return { mood: 'neutral', energy: 3, note: '' };
+            return {};
+        });
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            
+            if (type === 'sleep') {
+                const bedtime = new Date(`2000-01-01 ${formData.bedtime}`);
+                const wakeTime = new Date(`2000-01-01 ${formData.wakeTime}`);
+                let hours = (wakeTime - bedtime) / (1000 * 60 * 60);
+                if (hours < 0) hours += 24; // Handle overnight sleep
+                
+                dispatch({
+                    type: ActionTypes.LOG_SLEEP,
+                    payload: {
+                        bedtime: formData.bedtime,
+                        wakeTime: formData.wakeTime,
+                        hours: Math.round(hours * 10) / 10,
+                        quality: formData.quality
+                    }
+                });
+                showToast('Sleep logged! +5 XP', 'success');
+            } else if (type === 'water') {
+                dispatch({
+                    type: ActionTypes.LOG_WATER,
+                    payload: { glasses: formData.glasses }
+                });
+                showToast('Water intake updated! +1 XP', 'success');
+            } else if (type === 'exercise') {
+                dispatch({
+                    type: ActionTypes.LOG_EXERCISE,
+                    payload: {
+                        type: formData.type,
+                        duration: formData.duration,
+                        notes: formData.notes
+                    }
+                });
+                showToast('Exercise logged! +10 XP', 'success');
+            } else if (type === 'mood') {
+                dispatch({
+                    type: ActionTypes.LOG_MOOD,
+                    payload: {
+                        mood: formData.mood,
+                        energy: formData.energy,
+                        note: formData.note
+                    }
+                });
+                showToast('Mood logged! +3 XP', 'success');
+            }
+            
+            onClose();
+        };
+        
+        const titles = {
+            sleep: '💤 Log Sleep',
+            water: '💧 Log Water',
+            exercise: '🏃 Log Exercise',
+            mood: '😊 Log Mood'
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
+                    <h3 className="text-xl font-bold text-white mb-4">{titles[type]}</h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {type === 'sleep' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Bedtime</label>
+                                    <input
+                                        type="time"
+                                        value={formData.bedtime}
+                                        onChange={(e) => setFormData({ ...formData, bedtime: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Wake Time</label>
+                                    <input
+                                        type="time"
+                                        value={formData.wakeTime}
+                                        onChange={(e) => setFormData({ ...formData, wakeTime: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Quality (1-5 stars)</label>
+                                    <div className="flex gap-2">
+                                        {[1, 2, 3, 4, 5].map(star => (
+                                            <button
+                                                key={star}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, quality: star })}
+                                                className="text-2xl transition-transform hover:scale-110"
+                                            >
+                                                {star <= formData.quality ? '⭐' : '☆'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                        
+                        {type === 'water' && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Glasses of Water</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    value={formData.glasses}
+                                    onChange={(e) => setFormData({ ...formData, glasses: parseInt(e.target.value) || 0 })}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                />
+                                <div className="mt-2 text-xs text-slate-400">Goal: 8 glasses/day</div>
+                            </div>
+                        )}
+                        
+                        {type === 'exercise' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
+                                    <select
+                                        value={formData.type}
+                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    >
+                                        <option value="walk">Walk</option>
+                                        <option value="run">Run</option>
+                                        <option value="gym">Gym</option>
+                                        <option value="yoga">Yoga</option>
+                                        <option value="sport">Sport</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Duration (minutes)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={formData.duration}
+                                        onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Notes (optional)</label>
+                                    <textarea
+                                        value={formData.notes}
+                                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white resize-none"
+                                        rows="2"
+                                    />
+                                </div>
+                            </>
+                        )}
+                        
+                        {type === 'mood' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">How are you feeling?</label>
+                                    <div className="flex justify-around gap-2">
+                                        {Object.entries(CONFIG.MOODS).map(([key, emoji]) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, mood: key })}
+                                                className={`text-4xl transition-all ${
+                                                    formData.mood === key ? 'scale-125' : 'opacity-50 hover:opacity-100'
+                                                }`}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Energy Level (1-5)</label>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="5"
+                                        value={formData.energy}
+                                        onChange={(e) => setFormData({ ...formData, energy: parseInt(e.target.value) })}
+                                        className="w-full"
+                                    />
+                                    <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                        <span>Low</span>
+                                        <span className="text-white font-medium">{formData.energy}</span>
+                                        <span>High</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Note (optional)</label>
+                                    <textarea
+                                        value={formData.note}
+                                        onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white resize-none"
+                                        rows="2"
+                                        placeholder="How was your day?"
+                                    />
+                                </div>
+                            </>
+                        )}
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Journal Entry Modal
+     */
+    const JournalEntryModal = memo(({ entry, onClose }) => {
+        const { dispatch } = useApp();
+        const today = DateUtils.toKey();
+        const [content, setContent] = useState(entry?.content || '');
+        const [mood, setMood] = useState(entry?.mood || 'neutral');
+        const [energy, setEnergy] = useState(entry?.energy || 3);
+        const [gratitude, setGratitude] = useState(entry?.gratitude || '');
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!content.trim()) return;
+            
+            if (entry) {
+                dispatch({
+                    type: ActionTypes.UPDATE_JOURNAL_ENTRY,
+                    payload: {
+                        id: entry.id,
+                        updates: { content: content.trim(), mood, energy, gratitude: gratitude.trim() }
+                    }
+                });
+                showToast('Journal updated', 'success');
+            } else {
+                dispatch({
+                    type: ActionTypes.ADD_JOURNAL_ENTRY,
+                    payload: {
+                        content: content.trim(),
+                        mood,
+                        energy,
+                        gratitude: gratitude.trim()
+                    }
+                });
+                showToast('Journal entry saved! +10 XP', 'success');
+            }
+            onClose();
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-lg bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700 max-h-[90vh] overflow-y-auto">
+                    <h3 className="text-xl font-bold text-white mb-4">
+                        {entry ? 'Edit Entry' : '✍️ New Journal Entry'}
+                    </h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">How was your day?</label>
+                            <textarea
+                                value={content}
+                                onChange={(e) => setContent(e.target.value)}
+                                placeholder="Write about your day, thoughts, and feelings..."
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white resize-none"
+                                rows="6"
+                                required
+                            />
+                            <div className="mt-1 text-xs text-slate-400">
+                                {content.trim().split(/\s+/).filter(w => w).length} words
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Mood</label>
+                            <div className="flex justify-around gap-2">
+                                {Object.entries(CONFIG.MOODS).map(([key, emoji]) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => setMood(key)}
+                                        className={`text-3xl transition-all ${
+                                            mood === key ? 'scale-125' : 'opacity-50 hover:opacity-100'
+                                        }`}
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Energy Level</label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="5"
+                                value={energy}
+                                onChange={(e) => setEnergy(parseInt(e.target.value))}
+                                className="w-full"
+                            />
+                            <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                <span>Low</span>
+                                <span className="text-white font-medium">{energy}</span>
+                                <span>High</span>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Gratitude (optional)</label>
+                            <input
+                                type="text"
+                                value={gratitude}
+                                onChange={(e) => setGratitude(e.target.value)}
+                                placeholder="What are you grateful for today?"
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                {entry ? 'Update' : 'Save Entry'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
     // --- TEMPLATES (Full page layouts) ---
 
     /**
@@ -3958,6 +4327,32 @@
         const { state, dispatch } = useApp();
         const today = DateUtils.toKey();
         const todayEntry = state.journalEntries.find(e => e.date === today);
+        const [showJournalModal, setShowJournalModal] = useState(false);
+        const [showWellnessModal, setShowWellnessModal] = useState(null); // 'sleep', 'water', 'exercise', 'mood'
+        
+        // Calculate wellness stats
+        const todayWater = state.waterLog[today] || 0;
+        const todaySleep = state.sleepLog.find(s => s.date === today);
+        const todayExercise = state.exerciseLog.filter(e => e.date === today);
+        const todayMood = state.moodLog[today];
+        const todayExerciseTime = todayExercise.reduce((sum, e) => sum + e.duration, 0);
+        
+        // Calculate journal streak
+        const journalStreak = useMemo(() => {
+            let streak = 0;
+            let currentDate = new Date();
+            
+            while (true) {
+                const dateKey = DateUtils.toKey(currentDate);
+                const hasEntry = state.journalEntries.some(e => e.date === dateKey);
+                
+                if (!hasEntry) break;
+                streak++;
+                currentDate.setDate(currentDate.getDate() - 1);
+            }
+            
+            return streak;
+        }, [state.journalEntries]);
         
         return (
             <div className="space-y-6">
@@ -3969,26 +4364,42 @@
                 
                 {/* Wellness Quick Stats */}
                 <div className="grid grid-cols-4 gap-3">
-                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
+                    <button
+                        onClick={() => setShowWellnessModal('sleep')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
                         <div className="text-2xl mb-1">💤</div>
                         <div className="text-xs text-slate-400">Sleep</div>
-                        <div className="text-sm font-semibold text-white">-</div>
-                    </div>
-                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
+                        <div className="text-sm font-semibold text-white">
+                            {todaySleep ? `${todaySleep.hours}h` : '-'}
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setShowWellnessModal('water')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
                         <div className="text-2xl mb-1">💧</div>
                         <div className="text-xs text-slate-400">Water</div>
-                        <div className="text-sm font-semibold text-white">{state.waterLog[today] || 0}/8</div>
-                    </div>
-                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
+                        <div className="text-sm font-semibold text-white">{todayWater}/{state.waterGoal}</div>
+                    </button>
+                    <button
+                        onClick={() => setShowWellnessModal('exercise')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
                         <div className="text-2xl mb-1">🏃</div>
                         <div className="text-xs text-slate-400">Exercise</div>
-                        <div className="text-sm font-semibold text-white">0m</div>
-                    </div>
-                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
-                        <div className="text-2xl mb-1">{state.moodLog[today]?.mood ? CONFIG.MOODS[state.moodLog[today].mood] : '😐'}</div>
+                        <div className="text-sm font-semibold text-white">{todayExerciseTime}m</div>
+                    </button>
+                    <button
+                        onClick={() => setShowWellnessModal('mood')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="text-2xl mb-1">{todayMood?.mood ? CONFIG.MOODS[todayMood.mood] : '😐'}</div>
                         <div className="text-xs text-slate-400">Mood</div>
-                        <div className="text-sm font-semibold text-white">-</div>
-                    </div>
+                        <div className="text-sm font-semibold text-white">
+                            {todayMood ? `${todayMood.energy}/5` : '-'}
+                        </div>
+                    </button>
                 </div>
                 
                 {/* Journal Entry */}
@@ -3996,35 +4407,98 @@
                     {todayEntry ? (
                         <div>
                             <div className="flex items-center justify-between mb-4">
-                                <h3 className="text-lg font-semibold text-white">Today's Entry</h3>
-                                <button className="text-indigo-400 hover:text-indigo-300 text-sm font-medium">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl">{CONFIG.MOODS[todayEntry.mood]}</span>
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-white">Today's Entry</h3>
+                                        <p className="text-xs text-slate-400">{todayEntry.wordCount} words</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowJournalModal(true)}
+                                    className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
+                                >
                                     Edit
                                 </button>
                             </div>
-                            <p className="text-slate-300 whitespace-pre-wrap">{todayEntry.content}</p>
+                            <p className="text-slate-300 whitespace-pre-wrap mb-3">{todayEntry.content}</p>
+                            {todayEntry.gratitude && (
+                                <div className="bg-indigo-500/10 rounded-lg p-3 border border-indigo-500/20">
+                                    <div className="text-xs text-indigo-400 font-medium mb-1">Grateful for:</div>
+                                    <div className="text-sm text-white">{todayEntry.gratitude}</div>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         <div className="text-center py-8">
                             <div className="text-4xl mb-4">✍️</div>
                             <h3 className="text-lg font-semibold text-white mb-2">No Entry Yet</h3>
                             <p className="text-slate-400 mb-4">Start journaling to track your thoughts and progress</p>
-                            <button className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors">
+                            <button
+                                onClick={() => setShowJournalModal(true)}
+                                className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors"
+                            >
                                 Write Entry
                             </button>
                         </div>
                     )}
                 </div>
                 
-                {/* Streak */}
-                <div className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 rounded-xl p-4 border border-purple-500/20">
-                    <div className="flex items-center justify-between">
-                        <div>
-                            <div className="text-2xl font-bold text-purple-400">0 days</div>
-                            <div className="text-sm text-slate-400">Journal Streak</div>
+                {/* Streak & Recent Entries */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 rounded-xl p-4 border border-purple-500/20">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-2xl font-bold text-purple-400">{journalStreak} days</div>
+                                <div className="text-sm text-slate-400">Journal Streak</div>
+                            </div>
+                            <div className="text-4xl">🔥</div>
                         </div>
-                        <div className="text-4xl">🔥</div>
+                    </div>
+                    
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="text-sm font-semibold text-white mb-2">Total Entries</div>
+                        <div className="text-2xl font-bold text-indigo-400">{state.journalEntries.length}</div>
                     </div>
                 </div>
+                
+                {/* Recent Entries */}
+                {state.journalEntries.length > 1 && (
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <h4 className="text-sm font-semibold text-white mb-3">Recent Entries</h4>
+                        <div className="space-y-2">
+                            {state.journalEntries
+                                .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                .slice(1, 6)
+                                .map(entry => (
+                                    <div key={entry.id} className="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xl">{CONFIG.MOODS[entry.mood]}</span>
+                                            <div>
+                                                <div className="text-sm font-medium text-white">{entry.date}</div>
+                                                <div className="text-xs text-slate-400">{entry.wordCount} words</div>
+                                            </div>
+                                        </div>
+                                        <button className="text-xs text-indigo-400 hover:text-indigo-300">View</button>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* Modals */}
+                {showJournalModal && (
+                    <JournalEntryModal
+                        entry={todayEntry}
+                        onClose={() => setShowJournalModal(false)}
+                    />
+                )}
+                {showWellnessModal && (
+                    <WellnessModal
+                        type={showWellnessModal}
+                        onClose={() => setShowWellnessModal(null)}
+                    />
+                )}
             </div>
         );
     });
