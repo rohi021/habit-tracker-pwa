@@ -4039,10 +4039,29 @@
      * Dashboard Page
      */
     const DashboardPage = memo(() => {
+        const { state, dispatch } = useApp();
         const [showAddModal, setShowAddModal] = useState(false);
         const [editingHabitId, setEditingHabitId] = useState(null);
         const [focusHabitId, setFocusHabitId] = useState(null);
-        const { dispatch } = useApp();
+        
+        const today = DateUtils.toKey();
+        
+        // Calculate widget stats
+        const todayStudyTime = useMemo(() => {
+            return state.studySessions
+                .filter(s => s.date === today)
+                .reduce((sum, s) => sum + s.duration, 0);
+        }, [state.studySessions, today]);
+        
+        const nextAssignment = useMemo(() => {
+            const pending = state.assignments
+                .filter(a => a.status !== 'completed' && new Date(a.dueDate) >= new Date())
+                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+            return pending[0];
+        }, [state.assignments]);
+        
+        const todayWater = state.waterLog[today] || 0;
+        const todaySleep = state.sleepLog.find(s => s.date === today);
         
         const handleStartFocus = useCallback((habitId) => {
             setFocusHabitId(habitId);
@@ -4052,11 +4071,75 @@
             dispatch({ type: ActionTypes.TOGGLE_HABIT, payload: { id: habitId } });
         }, [dispatch]);
         
+        // Calculate best habit streak
+        const bestStreak = useMemo(() => {
+            const habits = Object.values(state.habits).filter(h => !h.archived);
+            if (habits.length === 0) return { name: 'None', days: 0 };
+            
+            const habitStreaks = habits.map(h => ({
+                name: h.name,
+                days: HabitUtils.calculateStreak(h.data)
+            }));
+            
+            return habitStreaks.reduce((best, current) => 
+                current.days > best.days ? current : best
+            , { name: 'None', days: 0 });
+        }, [state.habits]);
+        
         return (
             <>
                 <StatsOverview />
+                
+                {/* Quick Access Widgets */}
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                    {/* Study Widget */}
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' })}
+                        className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-xl p-4 border border-indigo-500/20 text-left hover:from-indigo-500/20 hover:to-purple-500/20 transition-all"
+                    >
+                        <div className="text-2xl mb-1">⏱️</div>
+                        <div className="text-lg font-bold text-white">{Math.floor(todayStudyTime / 60)}h {todayStudyTime % 60}m</div>
+                        <div className="text-xs text-slate-400">Study Today</div>
+                    </button>
+                    
+                    {/* Next Assignment Widget */}
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' })}
+                        className="bg-gradient-to-br from-amber-500/10 to-rose-500/10 rounded-xl p-4 border border-amber-500/20 text-left hover:from-amber-500/20 hover:to-rose-500/20 transition-all"
+                    >
+                        <div className="text-2xl mb-1">📝</div>
+                        <div className="text-sm font-bold text-white truncate">
+                            {nextAssignment ? nextAssignment.title : 'No tasks'}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                            {nextAssignment ? 
+                                `Due ${Math.ceil((new Date(nextAssignment.dueDate) - new Date()) / (1000 * 60 * 60 * 24))}d` 
+                                : 'All clear!'}
+                        </div>
+                    </button>
+                    
+                    {/* Wellness Widget */}
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'journal' })}
+                        className="bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 rounded-xl p-4 border border-emerald-500/20 text-left hover:from-emerald-500/20 hover:to-cyan-500/20 transition-all"
+                    >
+                        <div className="text-2xl mb-1">💧</div>
+                        <div className="text-lg font-bold text-white">{todayWater}/{state.waterGoal}</div>
+                        <div className="text-xs text-slate-400">Water Today</div>
+                    </button>
+                    
+                    {/* XP Widget */}
+                    <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-xl p-4 border border-purple-500/20">
+                        <div className="text-2xl mb-1">🏆</div>
+                        <div className="text-lg font-bold text-white">Level {state.level}</div>
+                        <div className="text-xs text-slate-400">{state.xp} XP</div>
+                    </div>
+                </div>
+                
+                {/* Insights Panel */}
                 <InsightsPanel />
                 
+                {/* Today's Habits */}
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="font-bold text-white text-lg">Today's Habits</h2>
                     <button
@@ -4071,6 +4154,19 @@
                     onEdit={setEditingHabitId}
                     onStartFocus={handleStartFocus}
                 />
+                
+                {/* Best Streak Card */}
+                {bestStreak.days > 0 && (
+                    <div className="bg-gradient-to-r from-orange-500/10 to-red-500/10 rounded-xl p-4 border border-orange-500/20 mt-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm text-slate-400 mb-1">🔥 Current Best Streak</div>
+                                <div className="text-lg font-bold text-white">{bestStreak.name}</div>
+                            </div>
+                            <div className="text-3xl font-bold text-orange-400">{bestStreak.days}d</div>
+                        </div>
+                    </div>
+                )}
                 
                 {/* Modals */}
                 {showAddModal && (
