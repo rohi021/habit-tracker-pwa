@@ -3455,6 +3455,172 @@
         );
     });
 
+    /**
+     * Study View - Study sessions, assignments, and timetable
+     */
+    const StudyView = memo(() => {
+        const { state, dispatch } = useApp();
+        const [activeTab, setActiveTab] = useState('timer'); // timer, assignments, timetable
+        
+        return (
+            <div className="space-y-6">
+                {/* Header */}
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">📚 Study Hub</h2>
+                    <p className="text-slate-400 text-sm">Track study sessions, manage assignments, and view your timetable</p>
+                </div>
+                
+                {/* Tab Navigation */}
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl">
+                    {[
+                        { id: 'timer', label: 'Study Timer', icon: '⏱️' },
+                        { id: 'assignments', label: 'Assignments', icon: '📝' },
+                        { id: 'timetable', label: 'Timetable', icon: '📅' }
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === tab.id
+                                    ? 'bg-indigo-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            <span className="mr-2">{tab.icon}</span>
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+                
+                {/* Content */}
+                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                    {activeTab === 'timer' && (
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-4">⏱️</div>
+                            <h3 className="text-lg font-semibold text-white mb-2">Study Timer</h3>
+                            <p className="text-slate-400 mb-4">Track your study sessions with Pomodoro support</p>
+                            <button className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors">
+                                Start Study Session
+                            </button>
+                        </div>
+                    )}
+                    
+                    {activeTab === 'assignments' && (
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-4">📝</div>
+                            <h3 className="text-lg font-semibold text-white mb-2">Assignment Manager</h3>
+                            <p className="text-slate-400 mb-4">Track assignments and exams with deadlines</p>
+                            <button className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors">
+                                Add Assignment
+                            </button>
+                        </div>
+                    )}
+                    
+                    {activeTab === 'timetable' && (
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-4">📅</div>
+                            <h3 className="text-lg font-semibold text-white mb-2">Weekly Timetable</h3>
+                            <p className="text-slate-400 mb-4">Manage your class schedule</p>
+                            <button className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors">
+                                Add Class
+                            </button>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="text-2xl font-bold text-indigo-400">0h</div>
+                        <div className="text-sm text-slate-400">Today's Study Time</div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="text-2xl font-bold text-amber-400">0</div>
+                        <div className="text-sm text-slate-400">Pending Tasks</div>
+                    </div>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Journal View - Daily journaling and mood tracking
+     */
+    const JournalView = memo(() => {
+        const { state, dispatch } = useApp();
+        const today = DateUtils.toKey();
+        const todayEntry = state.journalEntries.find(e => e.date === today);
+        
+        return (
+            <div className="space-y-6">
+                {/* Header */}
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">📓 Daily Journal</h2>
+                    <p className="text-slate-400 text-sm">Reflect on your day and track your wellness</p>
+                </div>
+                
+                {/* Wellness Quick Stats */}
+                <div className="grid grid-cols-4 gap-3">
+                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
+                        <div className="text-2xl mb-1">💤</div>
+                        <div className="text-xs text-slate-400">Sleep</div>
+                        <div className="text-sm font-semibold text-white">-</div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
+                        <div className="text-2xl mb-1">💧</div>
+                        <div className="text-xs text-slate-400">Water</div>
+                        <div className="text-sm font-semibold text-white">{state.waterLog[today] || 0}/8</div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
+                        <div className="text-2xl mb-1">🏃</div>
+                        <div className="text-xs text-slate-400">Exercise</div>
+                        <div className="text-sm font-semibold text-white">0m</div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center">
+                        <div className="text-2xl mb-1">{state.moodLog[today]?.mood ? CONFIG.MOODS[state.moodLog[today].mood] : '😐'}</div>
+                        <div className="text-xs text-slate-400">Mood</div>
+                        <div className="text-sm font-semibold text-white">-</div>
+                    </div>
+                </div>
+                
+                {/* Journal Entry */}
+                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                    {todayEntry ? (
+                        <div>
+                            <div className="flex items-center justify-between mb-4">
+                                <h3 className="text-lg font-semibold text-white">Today's Entry</h3>
+                                <button className="text-indigo-400 hover:text-indigo-300 text-sm font-medium">
+                                    Edit
+                                </button>
+                            </div>
+                            <p className="text-slate-300 whitespace-pre-wrap">{todayEntry.content}</p>
+                        </div>
+                    ) : (
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-4">✍️</div>
+                            <h3 className="text-lg font-semibold text-white mb-2">No Entry Yet</h3>
+                            <p className="text-slate-400 mb-4">Start journaling to track your thoughts and progress</p>
+                            <button className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors">
+                                Write Entry
+                            </button>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Streak */}
+                <div className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 rounded-xl p-4 border border-purple-500/20">
+                    <div className="flex items-center justify-between">
+                        <div>
+                            <div className="text-2xl font-bold text-purple-400">0 days</div>
+                            <div className="text-sm text-slate-400">Journal Streak</div>
+                        </div>
+                        <div className="text-4xl">🔥</div>
+                    </div>
+                </div>
+            </div>
+        );
+    });
+
     // ============================================================================
     // SECTION 9: MAIN APP COMPONENT
     // ============================================================================
@@ -3479,9 +3645,11 @@
         // View components
         const viewComponents = {
             dashboard: DashboardPage,
-            matrix: MatrixView,
+            study: StudyView,
             analytics: AnalyticsView,
-            settings: SettingsView
+            journal: JournalView,
+            settings: SettingsView,
+            matrix: MatrixView // Keep matrix for backward compatibility
         };
         
         const CurrentView = viewComponents[state.view] || DashboardPage;
@@ -3514,10 +3682,10 @@
                     {/* Header */}
                     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-lg border-b border-slate-800">
                         <div className="max-w-2xl mx-auto px-4 py-3">
-                                                        <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-xl shadow-lg shadow-indigo-500/20">
-                                        📊
+                                        📚
                                     </div>
                                     <div>
                                         <h1 className="font-bold text-white text-lg">{CONFIG.APP_NAME}</h1>
@@ -3527,29 +3695,51 @@
                                     </div>
                                 </div>
                                 
-                                {/* Undo/Redo Buttons */}
-                                <div className="flex items-center gap-1">
-                                    <IconButton
-                                        icon="↩️"
-                                        label="Undo (Ctrl+Z)"
-                                        onClick={() => {
-                                            dispatch({ type: ActionTypes.UNDO });
-                                            showToast('Undone');
-                                        }}
-                                        disabled={state.undoStack.length === 0}
-                                        size="sm"
-                                    />
-                                    <IconButton
-                                        icon="↪️"
-                                        label="Redo (Ctrl+Shift+Z)"
-                                        onClick={() => {
-                                            dispatch({ type: ActionTypes.REDO });
-                                            showToast('Redone');
-                                        }}
-                                        disabled={state.redoStack.length === 0}
-                                        size="sm"
-                                    />
+                                <div className="flex items-center gap-2">
+                                    {/* XP/Level Indicator */}
+                                    <div className="hidden sm:flex flex-col items-end">
+                                        <div className="text-xs text-indigo-400 font-semibold">
+                                            Level {state.level}
+                                        </div>
+                                        <div className="text-xs text-slate-500">
+                                            {state.xp} XP
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Undo/Redo Buttons */}
+                                    <div className="flex items-center gap-1">
+                                        <IconButton
+                                            icon="↩️"
+                                            label="Undo (Ctrl+Z)"
+                                            onClick={() => {
+                                                dispatch({ type: ActionTypes.UNDO });
+                                                showToast('Undone');
+                                            }}
+                                            disabled={state.undoStack.length === 0}
+                                            size="sm"
+                                        />
+                                        <IconButton
+                                            icon="↪️"
+                                            label="Redo (Ctrl+Shift+Z)"
+                                            onClick={() => {
+                                                dispatch({ type: ActionTypes.REDO });
+                                                showToast('Redone');
+                                            }}
+                                            disabled={state.redoStack.length === 0}
+                                            size="sm"
+                                        />
+                                    </div>
                                 </div>
+                            </div>
+                            
+                            {/* XP Progress Bar */}
+                            <div className="mt-2 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                                    style={{ 
+                                        width: `${((state.xp % (state.level * state.level * CONFIG.XP_PER_LEVEL)) / (state.level * state.level * CONFIG.XP_PER_LEVEL)) * 100}%` 
+                                    }}
+                                />
                             </div>
                         </div>
                     </header>
@@ -3569,18 +3759,19 @@
                         role="navigation"
                         aria-label="Main navigation"
                     >
-                        <div className="max-w-2xl mx-auto px-4">
+                        <div className="max-w-2xl mx-auto px-2">
                             <div className="flex items-center justify-around py-2">
                                 {[
-                                    { id: 'dashboard', icon: '📋', label: 'Dashboard' },
-                                    { id: 'matrix', icon: '📊', label: 'Matrix' },
-                                    { id: 'analytics', icon: '📈', label: 'Analytics' },
+                                    { id: 'dashboard', icon: '📋', label: 'Home' },
+                                    { id: 'study', icon: '📚', label: 'Study' },
+                                    { id: 'analytics', icon: '📊', label: 'Stats' },
+                                    { id: 'journal', icon: '📓', label: 'Journal' },
                                     { id: 'settings', icon: '⚙️', label: 'Settings' }
                                 ].map((item) => (
                                     <button
                                         key={item.id}
                                         onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: item.id })}
-                                        className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all touch-target ${
+                                        className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all touch-target ${
                                             state.view === item.id
                                                 ? 'text-indigo-400 bg-indigo-500/10'
                                                 : 'text-slate-400 hover:text-slate-200'
