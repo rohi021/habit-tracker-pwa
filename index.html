@@ -3905,13 +3905,46 @@
                 <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-2xl">
-                            📊
+                            📚
                         </div>
                         <div>
                             <h3 className="font-bold text-white">{CONFIG.APP_NAME}</h3>
                             <p className="text-xs text-slate-400">Version {CONFIG.VERSION}</p>
                         </div>
                     </div>
+                </div>
+                
+                {/* Quick Access */}
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-300">Quick Access</h3>
+                    
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'expenses' })}
+                        className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">💰</span>
+                            <div className="text-left">
+                                <div className="font-medium text-white">Expense Tracker</div>
+                                <div className="text-xs text-slate-400">Manage your budget</div>
+                            </div>
+                        </div>
+                        <span className="text-slate-400">→</span>
+                    </button>
+                    
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'matrix' })}
+                        className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">📊</span>
+                            <div className="text-left">
+                                <div className="font-medium text-white">Eisenhower Matrix</div>
+                                <div className="text-xs text-slate-400">Priority quadrants</div>
+                            </div>
+                        </div>
+                        <span className="text-slate-400">→</span>
+                    </button>
                 </div>
                 
                 {/* Data Management */}
@@ -4599,6 +4632,341 @@
         );
     });
 
+    /**
+     * Expense Modal - Add/Edit Expense
+     */
+    const ExpenseModal = memo(({ expense, onClose }) => {
+        const { state, dispatch } = useApp();
+        const [amount, setAmount] = useState(expense?.amount || '');
+        const [category, setCategory] = useState(expense?.category || state.expenseCategories[0]);
+        const [description, setDescription] = useState(expense?.description || '');
+        const [date, setDate] = useState(expense?.date || DateUtils.toKey());
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!amount || parseFloat(amount) <= 0) return;
+            
+            if (expense) {
+                dispatch({
+                    type: ActionTypes.UPDATE_EXPENSE,
+                    payload: {
+                        id: expense.id,
+                        updates: {
+                            amount: parseFloat(amount),
+                            category,
+                            description: description.trim(),
+                            date
+                        }
+                    }
+                });
+                showToast('Expense updated', 'success');
+            } else {
+                dispatch({
+                    type: ActionTypes.ADD_EXPENSE,
+                    payload: {
+                        amount: parseFloat(amount),
+                        category,
+                        description: description.trim(),
+                        date
+                    }
+                });
+                showToast('Expense tracked! +2 XP', 'success');
+            }
+            onClose();
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
+                    <h3 className="text-xl font-bold text-white mb-4">
+                        {expense ? 'Edit Expense' : '💰 Add Expense'}
+                    </h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Amount *</label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    placeholder="0.00"
+                                    className="w-full pl-8 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                            <select
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            >
+                                {state.expenseCategories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                            <input
+                                type="text"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="e.g., Lunch at cafeteria"
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Date</label>
+                            <input
+                                type="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                {expense ? 'Update' : 'Add'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Expense Tracker View
+     */
+    const ExpenseView = memo(() => {
+        const { state, dispatch } = useApp();
+        const [showExpenseModal, setShowExpenseModal] = useState(false);
+        const [editingExpense, setEditingExpense] = useState(null);
+        const [timeFilter, setTimeFilter] = useState('month'); // day, week, month
+        
+        // Calculate filtered expenses
+        const filteredExpenses = useMemo(() => {
+            const now = new Date();
+            const today = DateUtils.toKey();
+            
+            return state.expenses.filter(e => {
+                if (timeFilter === 'day') return e.date === today;
+                if (timeFilter === 'week') {
+                    const expenseDate = new Date(e.date);
+                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return expenseDate >= weekAgo;
+                }
+                if (timeFilter === 'month') {
+                    const expenseDate = new Date(e.date);
+                    return expenseDate.getMonth() === now.getMonth() && 
+                           expenseDate.getFullYear() === now.getFullYear();
+                }
+                return true;
+            }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        }, [state.expenses, timeFilter]);
+        
+        // Calculate total and category breakdown
+        const stats = useMemo(() => {
+            const total = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+            const byCategory = {};
+            
+            filteredExpenses.forEach(e => {
+                byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
+            });
+            
+            return { total, byCategory };
+        }, [filteredExpenses]);
+        
+        const budgetRemaining = state.monthlyBudget - stats.total;
+        const budgetPercentage = (stats.total / state.monthlyBudget) * 100;
+        
+        const getCategoryIcon = (category) => {
+            const icons = {
+                'Food': '🍔',
+                'Transport': '🚗',
+                'Books': '📚',
+                'Entertainment': '🎮',
+                'Subscriptions': '💳',
+                'Health': '⚕️',
+                'Other': '📦'
+            };
+            return icons[category] || '💰';
+        };
+        
+        return (
+            <div className="space-y-6">
+                {/* Header */}
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">💰 Expense Tracker</h2>
+                    <p className="text-slate-400 text-sm">Track your spending and stay within budget</p>
+                </div>
+                
+                {/* Budget Overview */}
+                <div className="bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 rounded-xl p-6 border border-emerald-500/20">
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <div className="text-sm text-slate-400 mb-1">Monthly Budget</div>
+                            <div className="text-3xl font-bold text-white">${stats.total.toFixed(2)}</div>
+                            <div className="text-sm text-slate-400">of ${state.monthlyBudget}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-sm text-slate-400 mb-1">Remaining</div>
+                            <div className={`text-2xl font-bold ${
+                                budgetRemaining >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                            }`}>
+                                ${Math.abs(budgetRemaining).toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="bg-slate-800 rounded-full h-3 overflow-hidden">
+                        <div
+                            className={`h-full transition-all duration-500 ${
+                                budgetPercentage >= 100 ? 'bg-rose-500' :
+                                budgetPercentage >= 80 ? 'bg-amber-500' :
+                                'bg-emerald-500'
+                            }`}
+                            style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
+                        />
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1 text-right">{budgetPercentage.toFixed(0)}% used</div>
+                </div>
+                
+                {/* Time Filter */}
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl">
+                    {[
+                        { id: 'day', label: 'Today' },
+                        { id: 'week', label: 'Week' },
+                        { id: 'month', label: 'Month' }
+                    ].map(filter => (
+                        <button
+                            key={filter.id}
+                            onClick={() => setTimeFilter(filter.id)}
+                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                                timeFilter === filter.id
+                                    ? 'bg-indigo-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            {filter.label}
+                        </button>
+                    ))}
+                </div>
+                
+                {/* Category Breakdown */}
+                {Object.keys(stats.byCategory).length > 0 && (
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <h4 className="text-sm font-semibold text-white mb-3">Category Breakdown</h4>
+                        <div className="space-y-2">
+                            {Object.entries(stats.byCategory)
+                                .sort(([, a], [, b]) => b - a)
+                                .map(([category, amount]) => (
+                                    <div key={category} className="flex items-center gap-3">
+                                        <span className="text-xl">{getCategoryIcon(category)}</span>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-sm text-white">{category}</span>
+                                                <span className="text-sm font-semibold text-white">${amount.toFixed(2)}</span>
+                                            </div>
+                                            <div className="bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="h-full bg-indigo-500"
+                                                    style={{ width: `${(amount / stats.total) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* Add Expense Button */}
+                <button
+                    onClick={() => {
+                        setEditingExpense(null);
+                        setShowExpenseModal(true);
+                    }}
+                    className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors"
+                >
+                    + Add Expense
+                </button>
+                
+                {/* Recent Expenses */}
+                {filteredExpenses.length > 0 ? (
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <h4 className="text-sm font-semibold text-white mb-3">Recent Expenses</h4>
+                        <div className="space-y-2">
+                            {filteredExpenses.slice(0, 10).map(expense => (
+                                <div key={expense.id} className="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">{getCategoryIcon(expense.category)}</span>
+                                        <div>
+                                            <div className="text-sm font-medium text-white">
+                                                {expense.description || expense.category}
+                                            </div>
+                                            <div className="text-xs text-slate-400">{expense.date}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm font-semibold text-white">${expense.amount.toFixed(2)}</span>
+                                        <button
+                                            onClick={() => {
+                                                setEditingExpense(expense);
+                                                setShowExpenseModal(true);
+                                            }}
+                                            className="text-xs text-indigo-400 hover:text-indigo-300"
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                        <div className="text-4xl mb-4">💰</div>
+                        <h3 className="text-lg font-semibold text-white mb-2">No Expenses Yet</h3>
+                        <p className="text-slate-400">Start tracking your spending to stay within budget</p>
+                    </div>
+                )}
+                
+                {/* Modal */}
+                {showExpenseModal && (
+                    <ExpenseModal
+                        expense={editingExpense}
+                        onClose={() => {
+                            setShowExpenseModal(false);
+                            setEditingExpense(null);
+                        }}
+                    />
+                )}
+            </div>
+        );
+    });
+
     // ============================================================================
     // SECTION 9: MAIN APP COMPONENT
     // ============================================================================
@@ -4626,6 +4994,7 @@
             study: StudyView,
             analytics: AnalyticsView,
             journal: JournalView,
+            expenses: ExpenseView,
             settings: SettingsView,
             matrix: MatrixView // Keep matrix for backward compatibility
         };
