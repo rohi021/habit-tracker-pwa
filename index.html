@@ -2817,7 +2817,7 @@
      */
     const StudyTimer = memo(({ onClose }) => {
         const { state, dispatch } = useApp();
-        const [selectedSubject, setSelectedSubject] = useState(state.subjects[0]);
+        const [selectedSubject, setSelectedSubject] = useState('');
         const [timerMode, setTimerMode] = useState('regular'); // regular or pomodoro
         const [timeElapsed, setTimeElapsed] = useState(0);
         const [isRunning, setIsRunning] = useState(false);
@@ -2868,15 +2868,13 @@
                         <>
                             <div className="mb-4">
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Subject</label>
-                                <select
+                                <input
+                                    type="text"
                                     value={selectedSubject}
                                     onChange={(e) => setSelectedSubject(e.target.value)}
+                                    placeholder="e.g., Mathematics, Physics, etc."
                                     className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
-                                >
-                                    {state.subjects.map(subject => (
-                                        <option key={subject} value={subject}>{subject}</option>
-                                    ))}
-                                </select>
+                                />
                             </div>
                             
                             <div className="mb-6">
@@ -3071,6 +3069,152 @@
                                 className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
                             >
                                 {assignment ? 'Update' : 'Add'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Timetable Modal - Add/Edit Class Schedule
+     */
+    const TimetableModal = memo(({ onClose, entry = null }) => {
+        const { dispatch } = useApp();
+        const [subject, setSubject] = useState(entry?.subject || '');
+        const [day, setDay] = useState(entry?.day || 'Monday');
+        const [startTime, setStartTime] = useState(entry?.startTime || '');
+        const [endTime, setEndTime] = useState(entry?.endTime || '');
+        const [room, setRoom] = useState(entry?.room || '');
+        const [notes, setNotes] = useState(entry?.notes || '');
+        
+        const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+        const colors = ['bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-emerald-500', 'bg-cyan-500'];
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!subject.trim() || !startTime || !endTime) return;
+            
+            if (entry) {
+                dispatch({
+                    type: ActionTypes.UPDATE_TIMETABLE_ENTRY,
+                    payload: {
+                        id: entry.id,
+                        updates: { subject: subject.trim(), day, startTime, endTime, room, notes }
+                    }
+                });
+                showToast('Class updated', 'success');
+            } else {
+                const color = colors[Math.floor(Math.random() * colors.length)];
+                dispatch({
+                    type: ActionTypes.ADD_TIMETABLE_ENTRY,
+                    payload: {
+                        subject: subject.trim(),
+                        day,
+                        startTime,
+                        endTime,
+                        room,
+                        color,
+                        notes
+                    }
+                });
+                showToast('Class added', 'success');
+            }
+            onClose();
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
+                    <h3 className="text-xl font-bold text-white mb-4">
+                        {entry ? 'Edit Class' : 'Add Class'}
+                    </h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Subject *</label>
+                            <input
+                                type="text"
+                                value={subject}
+                                onChange={(e) => setSubject(e.target.value)}
+                                placeholder="e.g., Mathematics, Physics, etc."
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                required
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Day of Week *</label>
+                            <select
+                                value={day}
+                                onChange={(e) => setDay(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            >
+                                {days.map(d => (
+                                    <option key={d} value={d}>{d}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Start Time *</label>
+                                <input
+                                    type="time"
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">End Time *</label>
+                                <input
+                                    type="time"
+                                    value={endTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Room/Location</label>
+                            <input
+                                type="text"
+                                value={room}
+                                onChange={(e) => setRoom(e.target.value)}
+                                placeholder="e.g., Room 101, Building A"
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Notes</label>
+                            <input
+                                type="text"
+                                value={notes}
+                                onChange={(e) => setNotes(e.target.value)}
+                                placeholder="e.g., Bring textbook"
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                {entry ? 'Update' : 'Add'}
                             </button>
                         </div>
                     </form>
@@ -4233,6 +4377,8 @@
         const [showStudyTimer, setShowStudyTimer] = useState(false);
         const [showAssignmentModal, setShowAssignmentModal] = useState(false);
         const [editingAssignment, setEditingAssignment] = useState(null);
+        const [showTimetableModal, setShowTimetableModal] = useState(false);
+        const [editingTimetable, setEditingTimetable] = useState(null);
         
         // Calculate today's study time
         const todayStudyTime = useMemo(() => {
@@ -4410,15 +4556,84 @@
                 )}
                 
                 {activeTab === 'timetable' && (
-                    <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
-                        <div className="text-center py-8">
-                            <div className="text-4xl mb-4">📅</div>
-                            <h3 className="text-lg font-semibold text-white mb-2">Weekly Timetable</h3>
-                            <p className="text-slate-400 mb-4">Manage your class schedule</p>
-                            <button className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors">
-                                Add Class
-                            </button>
-                        </div>
+                    <div className="space-y-4">
+                        <button
+                            onClick={() => setShowTimetableModal(true)}
+                            className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors"
+                        >
+                            + Add Class
+                        </button>
+                        
+                        {state.timetable.length > 0 ? (
+                            <div className="space-y-3">
+                                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
+                                    const dayClasses = state.timetable.filter(c => c.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
+                                    
+                                    if (dayClasses.length === 0) return null;
+                                    
+                                    return (
+                                        <div key={day} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                            <h4 className="text-sm font-semibold text-slate-300 mb-3">{day}</h4>
+                                            <div className="space-y-2">
+                                                {dayClasses.map(cls => (
+                                                    <div
+                                                        key={cls.id}
+                                                        className={`${cls.color} bg-opacity-20 border border-opacity-50 ${cls.color.replace('bg-', 'border-')} rounded-lg p-3`}
+                                                    >
+                                                        <div className="flex items-start justify-between">
+                                                            <div className="flex-1">
+                                                                <div className="font-medium text-white">{cls.subject}</div>
+                                                                <div className="text-sm text-slate-300 mt-1">
+                                                                    {cls.startTime} - {cls.endTime}
+                                                                </div>
+                                                                {cls.room && (
+                                                                    <div className="text-sm text-slate-400 mt-1">
+                                                                        📍 {cls.room}
+                                                                    </div>
+                                                                )}
+                                                                {cls.notes && (
+                                                                    <div className="text-sm text-slate-400 mt-1">
+                                                                        📝 {cls.notes}
+                                                                    </div>
+                                                                )}
+                                                            </div>
+                                                            <div className="flex gap-2 ml-2">
+                                                                <button
+                                                                    onClick={() => {
+                                                                        setEditingTimetable(cls);
+                                                                        setShowTimetableModal(true);
+                                                                    }}
+                                                                    className="text-slate-400 hover:text-indigo-400 transition-colors"
+                                                                >
+                                                                    ✏️
+                                                                </button>
+                                                                <button
+                                                                    onClick={() => {
+                                                                        if (confirm('Delete this class?')) {
+                                                                            dispatch({ type: ActionTypes.DELETE_TIMETABLE_ENTRY, payload: { id: cls.id } });
+                                                                            showToast('Class deleted', 'success');
+                                                                        }
+                                                                    }}
+                                                                    className="text-slate-400 hover:text-rose-400 transition-colors"
+                                                                >
+                                                                    🗑️
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                                <div className="text-4xl mb-4">📅</div>
+                                <h3 className="text-lg font-semibold text-white mb-2">No Classes</h3>
+                                <p className="text-slate-400 mb-4">Add your first class to get started</p>
+                            </div>
+                        )}
                     </div>
                 )}
                 
@@ -4442,6 +4657,15 @@
                         onClose={() => {
                             setShowAssignmentModal(false);
                             setEditingAssignment(null);
+                        }}
+                    />
+                )}
+                {showTimetableModal && (
+                    <TimetableModal
+                        entry={editingTimetable}
+                        onClose={() => {
+                            setShowTimetableModal(false);
+                            setEditingTimetable(null);
                         }}
                     />
                 )}
