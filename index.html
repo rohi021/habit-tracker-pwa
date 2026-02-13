@@ -3917,7 +3917,7 @@
      */
     const TimetableModal = memo(({ onClose, entry = null }) => {
         const { state, dispatch } = useApp();
-        const [subject, setSubject] = useState(entry?.subject || state.subjects[0]);
+        const [subject, setSubject] = useState(entry?.subject || (state.subjects.length > 0 ? state.subjects[0] : ''));
         const [day, setDay] = useState(entry?.day || 'Monday');
         const [startTime, setStartTime] = useState(entry?.startTime || '09:00');
         const [endTime, setEndTime] = useState(entry?.endTime || '10:00');
