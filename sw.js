@@ -1,4 +1,4 @@
-const CACHE_NAME = 'habit-tracker-v2';
+const CACHE_NAME = 'studentos-v2';
 const OFFLINE_URL = '/index.html';
 
 const ASSETS_TO_CACHE = [
@@ -76,16 +76,16 @@ self.addEventListener('sync', (event) => {
 });
 
 async function syncHabits() {
-  // Sync logic when back online
-  console.log('Syncing habits...');
+  // Sync logic when back online for StudentOS
+  console.log('Syncing StudentOS data...');
 }
 
 // Push notifications
 self.addEventListener('push', (event) => {
   const data = event.data?.json() ?? {};
-  const title = data.title || '🎯 Habit Reminder';
+  const title = data.title || '📚 StudentOS Reminder';
   const options = {
-    body: data.body || "Don't forget to check your habits today!",
+    body: data.body || "Time to check in with your student life!",
     icon: '/icons/icon-192.png',
     badge: '/icons/icon-192.png',
     vibrate: [100, 50, 100],

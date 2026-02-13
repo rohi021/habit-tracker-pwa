@@ -3,11 +3,11 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=5.0">
-    <meta name="description" content="Production-grade habit tracking with real analytics">
+    <meta name="description" content="Complete student life management platform - study, assignments, expenses, wellness, and more">
     <meta name="theme-color" content="#0f172a" media="(prefers-color-scheme: dark)">
     <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
     
-    <title>HabitOS | Production-Grade Habit Tracker</title>
+    <title>StudentOS | Complete Student Life Management</title>
     
     <!-- PWA -->
     <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiSGFiaXRPUyIsInNob3J0X25hbWUiOiJIYWJpdE9TIiwic3RhcnRfdXJsIjoiLiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwZjE3MmEiLCJ0aGVtZV9jb2xvciI6IiM2MzY2ZjEifQ==">
@@ -217,9 +217,9 @@
      * @constant
      */
     const CONFIG = Object.freeze({
-        APP_NAME: 'HabitOS',
+        APP_NAME: 'StudentOS',
         VERSION: '2.0.0',
-        STORAGE_KEY: 'habitos-v2',
+        STORAGE_KEY: 'studentos-v2', // Changed from habitos-v2 for migration
         MAX_UNDO_STACK: 30,
         DEBOUNCE_MS: 500,
         MIN_DATA_POINTS_FOR_INSIGHTS: 7,
@@ -240,6 +240,29 @@
             q2: { name: 'Schedule', description: 'Not Urgent but Important', color: 'purple' },
             q3: { name: 'Delegate', description: 'Urgent but Not Important', color: 'amber' },
             q4: { name: 'Eliminate', description: 'Neither Urgent nor Important', color: 'slate' },
+        }),
+        // XP and Level System
+        XP_PER_LEVEL: 100, // Level = sqrt(XP / 100) + 1
+        MAX_LEVEL: 50,
+        LEVEL_TITLES: Object.freeze({
+            1: 'Freshman',
+            5: 'Student',
+            10: 'Scholar',
+            15: 'Achiever',
+            20: 'Expert',
+            25: 'Master',
+            30: 'Sage',
+            35: 'Virtuoso',
+            40: 'Legend',
+            50: 'Valedictorian'
+        }),
+        // Mood emojis
+        MOODS: Object.freeze({
+            veryHappy: '😄',
+            happy: '😊',
+            neutral: '😐',
+            sad: '😔',
+            verySad: '😢'
         }),
     });
 
@@ -925,7 +948,7 @@
      * Initial application state
      */
     const createInitialState = () => ({
-        // Core data
+        // Core data - Habits (existing)
         habits: {},
         habitOrder: [],
         
@@ -934,7 +957,7 @@
         selectedHabit: null,
         isLoading: true,
         
-        // Focus mode
+        // Focus mode (existing - now part of study)
         focusMode: {
             active: false,
             habitId: null,
@@ -942,17 +965,60 @@
             duration: 25 * 60 // 25 minutes default
         },
         
-        // Gamification
+        // ===== NEW: Study Session Tracker =====
+        studySessions: [], // { id, subject, startTime, endTime, duration, notes, date, type: 'regular'|'pomodoro' }
+        studyGoal: { daily: 120, weekly: 600 }, // minutes
+        subjects: ['Math', 'Science', 'English', 'History', 'Computer Science', 'Literature', 'Physics', 'Chemistry', 'Biology', 'Other'],
+        activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime }
+        
+        // ===== NEW: Assignments & Exams =====
+        assignments: [], // { id, title, subject, dueDate, priority, status, grade, type: 'assignment'|'exam', prepProgress, topics, createdAt }
+        
+        // ===== NEW: Expenses =====
+        expenses: [], // { id, amount, category, description, date }
+        monthlyBudget: 5000,
+        expenseCategories: ['Food', 'Transport', 'Books', 'Entertainment', 'Subscriptions', 'Health', 'Other'],
+        
+        // ===== NEW: Sleep & Wellness =====
+        sleepLog: [], // { id, date, bedtime, wakeTime, hours, quality }
+        waterLog: {}, // { [dateKey]: glasses }
+        exerciseLog: [], // { id, date, type, duration, notes }
+        moodLog: {}, // { [dateKey]: { mood, energy, note } }
+        waterGoal: 8, // glasses per day
+        sleepGoal: 8, // hours per night
+        
+        // ===== NEW: Goals with Milestones =====
+        goals: [], // { id, title, description, category, targetDate, milestones: [{text, done}], createdAt }
+        goalCategories: ['Academic', 'Health', 'Financial', 'Personal', 'Career'],
+        
+        // ===== NEW: Timetable =====
+        timetable: [], // { id, subject, day, startTime, endTime, room, color, notes }
+        
+        // ===== NEW: Journal =====
+        journalEntries: [], // { id, date, content, mood, energy, gratitude, tags, wordCount }
+        
+        // ===== Gamification (Enhanced) =====
         streakFreezes: 2,
         totalPoints: 0,
+        xp: 0,
+        level: 1,
+        achievements: [], // earned achievement IDs
+        dailyChallenges: [], // { id, text, type, target, progress, completed, date, xpReward }
         
-        // Settings
+        // Settings (Enhanced)
         settings: {
             theme: 'dark',
             soundEnabled: true,
             hapticEnabled: true,
             reminderTime: '21:00',
-            weekStartsOn: 0 // 0 = Sunday
+            weekStartsOn: 0, // 0 = Sunday
+            // New settings
+            studyReminderEnabled: true,
+            dailyStudyGoal: 120, // minutes
+            monthlyBudget: 5000,
+            waterGoal: 8,
+            sleepGoal: 8,
+            journalReminderEnabled: true
         },
         
         // Undo/Redo
@@ -960,27 +1026,73 @@
         redoStack: [],
         
         // Meta
-        lastSyncedAt: null
+        lastSyncedAt: null,
+        appVersion: '2.0.0' // Updated for StudentOS
     });
 
     /**
      * Action types enum
      */
     const ActionTypes = Object.freeze({
-        // Habit actions
+        // Habit actions (existing)
         ADD_HABIT: 'ADD_HABIT',
         UPDATE_HABIT: 'UPDATE_HABIT',
         DELETE_HABIT: 'DELETE_HABIT',
         TOGGLE_HABIT: 'TOGGLE_HABIT',
         REORDER_HABITS: 'REORDER_HABITS',
         
-        // Focus mode
+        // Focus mode (existing)
         START_FOCUS: 'START_FOCUS',
         END_FOCUS: 'END_FOCUS',
         
-        // Gamification
+        // Study Session Tracker
+        START_STUDY_SESSION: 'START_STUDY_SESSION',
+        END_STUDY_SESSION: 'END_STUDY_SESSION',
+        DELETE_STUDY_SESSION: 'DELETE_STUDY_SESSION',
+        UPDATE_STUDY_GOAL: 'UPDATE_STUDY_GOAL',
+        
+        // Assignments & Exams
+        ADD_ASSIGNMENT: 'ADD_ASSIGNMENT',
+        UPDATE_ASSIGNMENT: 'UPDATE_ASSIGNMENT',
+        DELETE_ASSIGNMENT: 'DELETE_ASSIGNMENT',
+        
+        // Expenses
+        ADD_EXPENSE: 'ADD_EXPENSE',
+        UPDATE_EXPENSE: 'UPDATE_EXPENSE',
+        DELETE_EXPENSE: 'DELETE_EXPENSE',
+        SET_MONTHLY_BUDGET: 'SET_MONTHLY_BUDGET',
+        
+        // Wellness
+        LOG_SLEEP: 'LOG_SLEEP',
+        DELETE_SLEEP_LOG: 'DELETE_SLEEP_LOG',
+        LOG_WATER: 'LOG_WATER',
+        LOG_EXERCISE: 'LOG_EXERCISE',
+        DELETE_EXERCISE: 'DELETE_EXERCISE',
+        LOG_MOOD: 'LOG_MOOD',
+        
+        // Goals
+        ADD_GOAL: 'ADD_GOAL',
+        UPDATE_GOAL: 'UPDATE_GOAL',
+        DELETE_GOAL: 'DELETE_GOAL',
+        TOGGLE_MILESTONE: 'TOGGLE_MILESTONE',
+        
+        // Timetable
+        ADD_TIMETABLE_ENTRY: 'ADD_TIMETABLE_ENTRY',
+        UPDATE_TIMETABLE_ENTRY: 'UPDATE_TIMETABLE_ENTRY',
+        DELETE_TIMETABLE_ENTRY: 'DELETE_TIMETABLE_ENTRY',
+        
+        // Journal
+        ADD_JOURNAL_ENTRY: 'ADD_JOURNAL_ENTRY',
+        UPDATE_JOURNAL_ENTRY: 'UPDATE_JOURNAL_ENTRY',
+        DELETE_JOURNAL_ENTRY: 'DELETE_JOURNAL_ENTRY',
+        
+        // Gamification (Enhanced)
         USE_STREAK_FREEZE: 'USE_STREAK_FREEZE',
         ADD_POINTS: 'ADD_POINTS',
+        ADD_XP: 'ADD_XP',
+        EARN_ACHIEVEMENT: 'EARN_ACHIEVEMENT',
+        GENERATE_DAILY_CHALLENGES: 'GENERATE_DAILY_CHALLENGES',
+        COMPLETE_CHALLENGE: 'COMPLETE_CHALLENGE',
         
         // UI
         SET_VIEW: 'SET_VIEW',
@@ -1180,6 +1292,398 @@
                 };
             }
             
+            // ===== STUDY SESSION ACTIONS =====
+            case ActionTypes.START_STUDY_SESSION: {
+                const { subject, type = 'regular' } = payload;
+                return {
+                    ...state,
+                    activeStudySession: {
+                        subject,
+                        startTime: Date.now(),
+                        type,
+                        pomodoroCount: 0,
+                        breakStartTime: null
+                    }
+                };
+            }
+            
+            case ActionTypes.END_STUDY_SESSION: {
+                if (!state.activeStudySession) return state;
+                
+                const session = {
+                    id: crypto.randomUUID(),
+                    subject: state.activeStudySession.subject,
+                    startTime: state.activeStudySession.startTime,
+                    endTime: Date.now(),
+                    duration: Math.floor((Date.now() - state.activeStudySession.startTime) / 1000 / 60), // minutes
+                    notes: payload?.notes || '',
+                    date: DateUtils.toKey(),
+                    type: state.activeStudySession.type,
+                    pomodoroCount: state.activeStudySession.pomodoroCount || 0
+                };
+                
+                const xpEarned = Math.floor(session.duration / 5) * 2; // 2 XP per 5 minutes
+                
+                return {
+                    ...state,
+                    studySessions: [...state.studySessions, session],
+                    activeStudySession: null,
+                    xp: state.xp + xpEarned
+                };
+            }
+            
+            case ActionTypes.DELETE_STUDY_SESSION: {
+                return {
+                    ...state,
+                    studySessions: state.studySessions.filter(s => s.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.UPDATE_STUDY_GOAL: {
+                return {
+                    ...state,
+                    studyGoal: { ...state.studyGoal, ...payload }
+                };
+            }
+            
+            // ===== ASSIGNMENT ACTIONS =====
+            case ActionTypes.ADD_ASSIGNMENT: {
+                const assignment = {
+                    id: crypto.randomUUID(),
+                    ...payload,
+                    createdAt: new Date().toISOString()
+                };
+                return {
+                    ...state,
+                    assignments: [...state.assignments, assignment],
+                    xp: state.xp + 5 // XP for planning
+                };
+            }
+            
+            case ActionTypes.UPDATE_ASSIGNMENT: {
+                const { id, updates } = payload;
+                const updatedAssignments = state.assignments.map(a =>
+                    a.id === id ? { ...a, ...updates } : a
+                );
+                
+                // Award XP for completing assignment
+                const assignment = state.assignments.find(a => a.id === id);
+                let xpGain = 0;
+                if (assignment && updates.status === 'completed' && assignment.status !== 'completed') {
+                    xpGain = assignment.type === 'exam' ? 50 : 30;
+                }
+                
+                return {
+                    ...state,
+                    assignments: updatedAssignments,
+                    xp: state.xp + xpGain
+                };
+            }
+            
+            case ActionTypes.DELETE_ASSIGNMENT: {
+                return {
+                    ...state,
+                    assignments: state.assignments.filter(a => a.id !== payload.id)
+                };
+            }
+            
+            // ===== EXPENSE ACTIONS =====
+            case ActionTypes.ADD_EXPENSE: {
+                const expense = {
+                    id: crypto.randomUUID(),
+                    ...payload,
+                    date: payload.date || DateUtils.toKey()
+                };
+                return {
+                    ...state,
+                    expenses: [...state.expenses, expense],
+                    xp: state.xp + 2 // XP for tracking
+                };
+            }
+            
+            case ActionTypes.UPDATE_EXPENSE: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    expenses: state.expenses.map(e => e.id === id ? { ...e, ...updates } : e)
+                };
+            }
+            
+            case ActionTypes.DELETE_EXPENSE: {
+                return {
+                    ...state,
+                    expenses: state.expenses.filter(e => e.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.SET_MONTHLY_BUDGET: {
+                return {
+                    ...state,
+                    monthlyBudget: payload.budget,
+                    settings: { ...state.settings, monthlyBudget: payload.budget }
+                };
+            }
+            
+            // ===== WELLNESS ACTIONS =====
+            case ActionTypes.LOG_SLEEP: {
+                const sleepEntry = {
+                    id: crypto.randomUUID(),
+                    date: payload.date || DateUtils.toKey(),
+                    bedtime: payload.bedtime,
+                    wakeTime: payload.wakeTime,
+                    hours: payload.hours,
+                    quality: payload.quality
+                };
+                return {
+                    ...state,
+                    sleepLog: [...state.sleepLog, sleepEntry],
+                    xp: state.xp + 5
+                };
+            }
+            
+            case ActionTypes.DELETE_SLEEP_LOG: {
+                return {
+                    ...state,
+                    sleepLog: state.sleepLog.filter(s => s.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.LOG_WATER: {
+                const { date = DateUtils.toKey(), glasses } = payload;
+                return {
+                    ...state,
+                    waterLog: { ...state.waterLog, [date]: glasses },
+                    xp: state.xp + 1
+                };
+            }
+            
+            case ActionTypes.LOG_EXERCISE: {
+                const exercise = {
+                    id: crypto.randomUUID(),
+                    date: payload.date || DateUtils.toKey(),
+                    type: payload.type,
+                    duration: payload.duration,
+                    notes: payload.notes || ''
+                };
+                return {
+                    ...state,
+                    exerciseLog: [...state.exerciseLog, exercise],
+                    xp: state.xp + 10
+                };
+            }
+            
+            case ActionTypes.DELETE_EXERCISE: {
+                return {
+                    ...state,
+                    exerciseLog: state.exerciseLog.filter(e => e.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.LOG_MOOD: {
+                const { date = DateUtils.toKey(), mood, energy, note } = payload;
+                return {
+                    ...state,
+                    moodLog: { ...state.moodLog, [date]: { mood, energy, note } },
+                    xp: state.xp + 3
+                };
+            }
+            
+            // ===== GOAL ACTIONS =====
+            case ActionTypes.ADD_GOAL: {
+                const goal = {
+                    id: crypto.randomUUID(),
+                    ...payload,
+                    milestones: payload.milestones || [],
+                    createdAt: new Date().toISOString()
+                };
+                return {
+                    ...state,
+                    goals: [...state.goals, goal],
+                    xp: state.xp + 15
+                };
+            }
+            
+            case ActionTypes.UPDATE_GOAL: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    goals: state.goals.map(g => g.id === id ? { ...g, ...updates } : g)
+                };
+            }
+            
+            case ActionTypes.DELETE_GOAL: {
+                return {
+                    ...state,
+                    goals: state.goals.filter(g => g.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.TOGGLE_MILESTONE: {
+                const { goalId, milestoneIndex } = payload;
+                const updatedGoals = state.goals.map(goal => {
+                    if (goal.id === goalId) {
+                        const newMilestones = [...goal.milestones];
+                        newMilestones[milestoneIndex] = {
+                            ...newMilestones[milestoneIndex],
+                            done: !newMilestones[milestoneIndex].done
+                        };
+                        return { ...goal, milestones: newMilestones };
+                    }
+                    return goal;
+                });
+                return {
+                    ...state,
+                    goals: updatedGoals,
+                    xp: state.xp + 5
+                };
+            }
+            
+            // ===== TIMETABLE ACTIONS =====
+            case ActionTypes.ADD_TIMETABLE_ENTRY: {
+                const entry = {
+                    id: crypto.randomUUID(),
+                    ...payload
+                };
+                return {
+                    ...state,
+                    timetable: [...state.timetable, entry]
+                };
+            }
+            
+            case ActionTypes.UPDATE_TIMETABLE_ENTRY: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    timetable: state.timetable.map(t => t.id === id ? { ...t, ...updates } : t)
+                };
+            }
+            
+            case ActionTypes.DELETE_TIMETABLE_ENTRY: {
+                return {
+                    ...state,
+                    timetable: state.timetable.filter(t => t.id !== payload.id)
+                };
+            }
+            
+            // ===== JOURNAL ACTIONS =====
+            case ActionTypes.ADD_JOURNAL_ENTRY: {
+                const entry = {
+                    id: crypto.randomUUID(),
+                    date: payload.date || DateUtils.toKey(),
+                    content: payload.content,
+                    mood: payload.mood,
+                    energy: payload.energy,
+                    gratitude: payload.gratitude || '',
+                    tags: payload.tags || [],
+                    wordCount: payload.content.trim().split(/\s+/).length
+                };
+                return {
+                    ...state,
+                    journalEntries: [...state.journalEntries, entry],
+                    xp: state.xp + 10
+                };
+            }
+            
+            case ActionTypes.UPDATE_JOURNAL_ENTRY: {
+                const { id, updates } = payload;
+                return {
+                    ...state,
+                    journalEntries: state.journalEntries.map(e =>
+                        e.id === id ? { ...e, ...updates } : e
+                    )
+                };
+            }
+            
+            case ActionTypes.DELETE_JOURNAL_ENTRY: {
+                return {
+                    ...state,
+                    journalEntries: state.journalEntries.filter(e => e.id !== payload.id)
+                };
+            }
+            
+            // ===== GAMIFICATION ACTIONS =====
+            case ActionTypes.ADD_XP: {
+                const newXP = state.xp + payload.amount;
+                const newLevel = Math.floor(Math.sqrt(newXP / 100)) + 1; // Level formula
+                return {
+                    ...state,
+                    xp: newXP,
+                    level: Math.min(newLevel, 50) // Cap at level 50
+                };
+            }
+            
+            case ActionTypes.EARN_ACHIEVEMENT: {
+                if (state.achievements.includes(payload.id)) return state;
+                return {
+                    ...state,
+                    achievements: [...state.achievements, payload.id],
+                    xp: state.xp + (payload.xpReward || 50)
+                };
+            }
+            
+            case ActionTypes.GENERATE_DAILY_CHALLENGES: {
+                // Clear old challenges if new day
+                const today = DateUtils.toKey();
+                const existingChallenges = state.dailyChallenges.filter(c => c.date === today);
+                
+                if (existingChallenges.length > 0) return state;
+                
+                // Generate 3 daily challenges
+                const challenges = [
+                    {
+                        id: crypto.randomUUID(),
+                        text: 'Study for 2 hours today',
+                        type: 'study',
+                        target: 120,
+                        progress: 0,
+                        completed: false,
+                        date: today,
+                        xpReward: 30
+                    },
+                    {
+                        id: crypto.randomUUID(),
+                        text: 'Drink 8 glasses of water',
+                        type: 'water',
+                        target: 8,
+                        progress: 0,
+                        completed: false,
+                        date: today,
+                        xpReward: 20
+                    },
+                    {
+                        id: crypto.randomUUID(),
+                        text: 'Complete 3 habits',
+                        type: 'habits',
+                        target: 3,
+                        progress: 0,
+                        completed: false,
+                        date: today,
+                        xpReward: 25
+                    }
+                ];
+                
+                return {
+                    ...state,
+                    dailyChallenges: challenges
+                };
+            }
+            
+            case ActionTypes.COMPLETE_CHALLENGE: {
+                const { id } = payload;
+                const challenge = state.dailyChallenges.find(c => c.id === id);
+                if (!challenge || challenge.completed) return state;
+                
+                const updatedChallenges = state.dailyChallenges.map(c =>
+                    c.id === id ? { ...c, completed: true } : c
+                );
+                
+                return {
+                    ...state,
+                    dailyChallenges: updatedChallenges,
+                    xp: state.xp + challenge.xpReward
+                };
+            }
+            
             case ActionTypes.LOAD_STATE: {
                 return {
                     ...state,
@@ -1218,11 +1722,36 @@
             timeoutRef.current = setTimeout(() => {
                 try {
                     const toSave = {
+                        // Existing fields
                         habits: state.habits,
                         habitOrder: state.habitOrder,
                         settings: state.settings,
                         streakFreezes: state.streakFreezes,
-                        totalPoints: state.totalPoints
+                        totalPoints: state.totalPoints,
+                        
+                        // New fields for StudentOS
+                        studySessions: state.studySessions,
+                        studyGoal: state.studyGoal,
+                        subjects: state.subjects,
+                        assignments: state.assignments,
+                        expenses: state.expenses,
+                        monthlyBudget: state.monthlyBudget,
+                        expenseCategories: state.expenseCategories,
+                        sleepLog: state.sleepLog,
+                        waterLog: state.waterLog,
+                        exerciseLog: state.exerciseLog,
+                        moodLog: state.moodLog,
+                        waterGoal: state.waterGoal,
+                        sleepGoal: state.sleepGoal,
+                        goals: state.goals,
+                        goalCategories: state.goalCategories,
+                        timetable: state.timetable,
+                        journalEntries: state.journalEntries,
+                        xp: state.xp,
+                        level: state.level,
+                        achievements: state.achievements,
+                        dailyChallenges: state.dailyChallenges,
+                        appVersion: state.appVersion
                     };
                     localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(toSave));
                 } catch (e) {
@@ -2281,6 +2810,646 @@
         );
     });
 
+    // --- STUDENT OS SPECIFIC COMPONENTS ---
+
+    /**
+     * Study Timer Component
+     */
+    const StudyTimer = memo(({ onClose }) => {
+        const { state, dispatch } = useApp();
+        const [selectedSubject, setSelectedSubject] = useState(state.subjects[0]);
+        const [timerMode, setTimerMode] = useState('regular'); // regular or pomodoro
+        const [timeElapsed, setTimeElapsed] = useState(0);
+        const [isRunning, setIsRunning] = useState(false);
+        
+        useEffect(() => {
+            let interval;
+            if (isRunning) {
+                interval = setInterval(() => {
+                    setTimeElapsed(prev => prev + 1);
+                }, 1000);
+            }
+            return () => clearInterval(interval);
+        }, [isRunning]);
+        
+        const handleStart = () => {
+            if (!state.activeStudySession) {
+                dispatch({
+                    type: ActionTypes.START_STUDY_SESSION,
+                    payload: { subject: selectedSubject, type: timerMode }
+                });
+            }
+            setIsRunning(true);
+        };
+        
+        const handleStop = () => {
+            setIsRunning(false);
+            if (state.activeStudySession) {
+                dispatch({ type: ActionTypes.END_STUDY_SESSION });
+                showToast(`Study session saved! +${Math.floor(timeElapsed / 60 / 5) * 2} XP`, 'success');
+            }
+            setTimeElapsed(0);
+            onClose();
+        };
+        
+        const formatTime = (seconds) => {
+            const hrs = Math.floor(seconds / 3600);
+            const mins = Math.floor((seconds % 3600) / 60);
+            const secs = seconds % 60;
+            return `${hrs.toString().padStart(2, '0')}:${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
+                <div className="w-full max-w-md mx-4 bg-slate-900 rounded-2xl p-6 border border-slate-700">
+                    <h3 className="text-xl font-bold text-white mb-4">Study Timer</h3>
+                    
+                    {!isRunning && (
+                        <>
+                            <div className="mb-4">
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Subject</label>
+                                <select
+                                    value={selectedSubject}
+                                    onChange={(e) => setSelectedSubject(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                >
+                                    {state.subjects.map(subject => (
+                                        <option key={subject} value={subject}>{subject}</option>
+                                    ))}
+                                </select>
+                            </div>
+                            
+                            <div className="mb-6">
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Mode</label>
+                                <div className="flex gap-2">
+                                    <button
+                                        onClick={() => setTimerMode('regular')}
+                                        className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
+                                            timerMode === 'regular' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
+                                        }`}
+                                    >
+                                        Regular
+                                    </button>
+                                    <button
+                                        onClick={() => setTimerMode('pomodoro')}
+                                        className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
+                                            timerMode === 'pomodoro' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
+                                        }`}
+                                    >
+                                        Pomodoro
+                                    </button>
+                                </div>
+                            </div>
+                        </>
+                    )}
+                    
+                    <div className="text-center mb-6">
+                        <div className="text-6xl font-mono font-bold text-indigo-400 mb-2">
+                            {formatTime(timeElapsed)}
+                        </div>
+                        <div className="text-slate-400">{selectedSubject}</div>
+                    </div>
+                    
+                    <div className="flex gap-3">
+                        {!isRunning ? (
+                            <>
+                                <button
+                                    onClick={onClose}
+                                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleStart}
+                                    className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Start
+                                </button>
+                            </>
+                        ) : (
+                            <>
+                                <button
+                                    onClick={() => setIsRunning(false)}
+                                    className="flex-1 py-3 bg-amber-500 hover:bg-amber-600 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Pause
+                                </button>
+                                <button
+                                    onClick={handleStop}
+                                    className="flex-1 py-3 bg-rose-500 hover:bg-rose-600 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Stop & Save
+                                </button>
+                            </>
+                        )}
+                    </div>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Assignment Form Modal
+     */
+    const AssignmentModal = memo(({ onClose, assignment = null }) => {
+        const { dispatch } = useApp();
+        const [title, setTitle] = useState(assignment?.title || '');
+        const [subject, setSubject] = useState(assignment?.subject || 'Math');
+        const [dueDate, setDueDate] = useState(assignment?.dueDate || '');
+        const [type, setType] = useState(assignment?.type || 'assignment');
+        const [priority, setPriority] = useState(assignment?.priority || 'medium');
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!title.trim() || !dueDate) return;
+            
+            if (assignment) {
+                dispatch({
+                    type: ActionTypes.UPDATE_ASSIGNMENT,
+                    payload: {
+                        id: assignment.id,
+                        updates: { title: title.trim(), subject, dueDate, type, priority }
+                    }
+                });
+                showToast('Assignment updated', 'success');
+            } else {
+                dispatch({
+                    type: ActionTypes.ADD_ASSIGNMENT,
+                    payload: {
+                        title: title.trim(),
+                        subject,
+                        dueDate,
+                        type,
+                        priority,
+                        status: 'pending',
+                        prepProgress: 0
+                    }
+                });
+                showToast('Assignment added! +5 XP', 'success');
+            }
+            onClose();
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
+                    <h3 className="text-xl font-bold text-white mb-4">
+                        {assignment ? 'Edit Assignment' : 'New Assignment'}
+                    </h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Title *</label>
+                            <input
+                                type="text"
+                                value={title}
+                                onChange={(e) => setTitle(e.target.value)}
+                                placeholder="e.g., Math homework chapter 5"
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                required
+                            />
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Subject</label>
+                                <input
+                                    type="text"
+                                    value={subject}
+                                    onChange={(e) => setSubject(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
+                                <select
+                                    value={type}
+                                    onChange={(e) => setType(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                >
+                                    <option value="assignment">Assignment</option>
+                                    <option value="exam">Exam</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div className="grid grid-cols-2 gap-3">
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Due Date *</label>
+                                <input
+                                    type="date"
+                                    value={dueDate}
+                                    onChange={(e) => setDueDate(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    required
+                                />
+                            </div>
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Priority</label>
+                                <select
+                                    value={priority}
+                                    onChange={(e) => setPriority(e.target.value)}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                >
+                                    <option value="low">Low</option>
+                                    <option value="medium">Medium</option>
+                                    <option value="high">High</option>
+                                </select>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                {assignment ? 'Update' : 'Add'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Wellness Tracker Modal - Log sleep, water, exercise, mood
+     */
+    const WellnessModal = memo(({ type, onClose }) => {
+        const { state, dispatch } = useApp();
+        const today = DateUtils.toKey();
+        const [formData, setFormData] = useState(() => {
+            if (type === 'sleep') return { bedtime: '', wakeTime: '', quality: 3 };
+            if (type === 'water') return { glasses: state.waterLog[today] || 0 };
+            if (type === 'exercise') return { type: 'walk', duration: 30, notes: '' };
+            if (type === 'mood') return { mood: 'neutral', energy: 3, note: '' };
+            return {};
+        });
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            
+            if (type === 'sleep') {
+                const bedtime = new Date(`2000-01-01 ${formData.bedtime}`);
+                const wakeTime = new Date(`2000-01-01 ${formData.wakeTime}`);
+                let hours = (wakeTime - bedtime) / (1000 * 60 * 60);
+                if (hours < 0) hours += 24; // Handle overnight sleep
+                
+                dispatch({
+                    type: ActionTypes.LOG_SLEEP,
+                    payload: {
+                        bedtime: formData.bedtime,
+                        wakeTime: formData.wakeTime,
+                        hours: Math.round(hours * 10) / 10,
+                        quality: formData.quality
+                    }
+                });
+                showToast('Sleep logged! +5 XP', 'success');
+            } else if (type === 'water') {
+                dispatch({
+                    type: ActionTypes.LOG_WATER,
+                    payload: { glasses: formData.glasses }
+                });
+                showToast('Water intake updated! +1 XP', 'success');
+            } else if (type === 'exercise') {
+                dispatch({
+                    type: ActionTypes.LOG_EXERCISE,
+                    payload: {
+                        type: formData.type,
+                        duration: formData.duration,
+                        notes: formData.notes
+                    }
+                });
+                showToast('Exercise logged! +10 XP', 'success');
+            } else if (type === 'mood') {
+                dispatch({
+                    type: ActionTypes.LOG_MOOD,
+                    payload: {
+                        mood: formData.mood,
+                        energy: formData.energy,
+                        note: formData.note
+                    }
+                });
+                showToast('Mood logged! +3 XP', 'success');
+            }
+            
+            onClose();
+        };
+        
+        const titles = {
+            sleep: '💤 Log Sleep',
+            water: '💧 Log Water',
+            exercise: '🏃 Log Exercise',
+            mood: '😊 Log Mood'
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
+                    <h3 className="text-xl font-bold text-white mb-4">{titles[type]}</h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        {type === 'sleep' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Bedtime</label>
+                                    <input
+                                        type="time"
+                                        value={formData.bedtime}
+                                        onChange={(e) => setFormData({ ...formData, bedtime: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Wake Time</label>
+                                    <input
+                                        type="time"
+                                        value={formData.wakeTime}
+                                        onChange={(e) => setFormData({ ...formData, wakeTime: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Quality (1-5 stars)</label>
+                                    <div className="flex gap-2">
+                                        {[1, 2, 3, 4, 5].map(star => (
+                                            <button
+                                                key={star}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, quality: star })}
+                                                className="text-2xl transition-transform hover:scale-110"
+                                            >
+                                                {star <= formData.quality ? '⭐' : '☆'}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                            </>
+                        )}
+                        
+                        {type === 'water' && (
+                            <div>
+                                <label className="block text-sm font-medium text-slate-300 mb-2">Glasses of Water</label>
+                                <input
+                                    type="number"
+                                    min="0"
+                                    max="20"
+                                    value={formData.glasses}
+                                    onChange={(e) => setFormData({ ...formData, glasses: parseInt(e.target.value) || 0 })}
+                                    className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                />
+                                <div className="mt-2 text-xs text-slate-400">Goal: 8 glasses/day</div>
+                            </div>
+                        )}
+                        
+                        {type === 'exercise' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
+                                    <select
+                                        value={formData.type}
+                                        onChange={(e) => setFormData({ ...formData, type: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    >
+                                        <option value="walk">Walk</option>
+                                        <option value="run">Run</option>
+                                        <option value="gym">Gym</option>
+                                        <option value="yoga">Yoga</option>
+                                        <option value="sport">Sport</option>
+                                        <option value="other">Other</option>
+                                    </select>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Duration (minutes)</label>
+                                    <input
+                                        type="number"
+                                        min="1"
+                                        value={formData.duration}
+                                        onChange={(e) => setFormData({ ...formData, duration: parseInt(e.target.value) || 0 })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Notes (optional)</label>
+                                    <textarea
+                                        value={formData.notes}
+                                        onChange={(e) => setFormData({ ...formData, notes: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white resize-none"
+                                        rows="2"
+                                    />
+                                </div>
+                            </>
+                        )}
+                        
+                        {type === 'mood' && (
+                            <>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">How are you feeling?</label>
+                                    <div className="flex justify-around gap-2">
+                                        {Object.entries(CONFIG.MOODS).map(([key, emoji]) => (
+                                            <button
+                                                key={key}
+                                                type="button"
+                                                onClick={() => setFormData({ ...formData, mood: key })}
+                                                className={`text-4xl transition-all ${
+                                                    formData.mood === key ? 'scale-125' : 'opacity-50 hover:opacity-100'
+                                                }`}
+                                            >
+                                                {emoji}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Energy Level (1-5)</label>
+                                    <input
+                                        type="range"
+                                        min="1"
+                                        max="5"
+                                        value={formData.energy}
+                                        onChange={(e) => setFormData({ ...formData, energy: parseInt(e.target.value) })}
+                                        className="w-full"
+                                    />
+                                    <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                        <span>Low</span>
+                                        <span className="text-white font-medium">{formData.energy}</span>
+                                        <span>High</span>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-2">Note (optional)</label>
+                                    <textarea
+                                        value={formData.note}
+                                        onChange={(e) => setFormData({ ...formData, note: e.target.value })}
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white resize-none"
+                                        rows="2"
+                                        placeholder="How was your day?"
+                                    />
+                                </div>
+                            </>
+                        )}
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Save
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Journal Entry Modal
+     */
+    const JournalEntryModal = memo(({ entry, onClose }) => {
+        const { dispatch } = useApp();
+        const today = DateUtils.toKey();
+        const [content, setContent] = useState(entry?.content || '');
+        const [mood, setMood] = useState(entry?.mood || 'neutral');
+        const [energy, setEnergy] = useState(entry?.energy || 3);
+        const [gratitude, setGratitude] = useState(entry?.gratitude || '');
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!content.trim()) return;
+            
+            if (entry) {
+                dispatch({
+                    type: ActionTypes.UPDATE_JOURNAL_ENTRY,
+                    payload: {
+                        id: entry.id,
+                        updates: { content: content.trim(), mood, energy, gratitude: gratitude.trim() }
+                    }
+                });
+                showToast('Journal updated', 'success');
+            } else {
+                dispatch({
+                    type: ActionTypes.ADD_JOURNAL_ENTRY,
+                    payload: {
+                        content: content.trim(),
+                        mood,
+                        energy,
+                        gratitude: gratitude.trim()
+                    }
+                });
+                showToast('Journal entry saved! +10 XP', 'success');
+            }
+            onClose();
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-lg bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700 max-h-[90vh] overflow-y-auto">
+                    <h3 className="text-xl font-bold text-white mb-4">
+                        {entry ? 'Edit Entry' : '✍️ New Journal Entry'}
+                    </h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">How was your day?</label>
+                            <textarea
+                                value={content}
+                                onChange={(e) => setContent(e.target.value)}
+                                placeholder="Write about your day, thoughts, and feelings..."
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white resize-none"
+                                rows="6"
+                                required
+                            />
+                            <div className="mt-1 text-xs text-slate-400">
+                                {content.trim().split(/\s+/).filter(w => w).length} words
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Mood</label>
+                            <div className="flex justify-around gap-2">
+                                {Object.entries(CONFIG.MOODS).map(([key, emoji]) => (
+                                    <button
+                                        key={key}
+                                        type="button"
+                                        onClick={() => setMood(key)}
+                                        className={`text-3xl transition-all ${
+                                            mood === key ? 'scale-125' : 'opacity-50 hover:opacity-100'
+                                        }`}
+                                    >
+                                        {emoji}
+                                    </button>
+                                ))}
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Energy Level</label>
+                            <input
+                                type="range"
+                                min="1"
+                                max="5"
+                                value={energy}
+                                onChange={(e) => setEnergy(parseInt(e.target.value))}
+                                className="w-full"
+                            />
+                            <div className="flex justify-between text-xs text-slate-400 mt-1">
+                                <span>Low</span>
+                                <span className="text-white font-medium">{energy}</span>
+                                <span>High</span>
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Gratitude (optional)</label>
+                            <input
+                                type="text"
+                                value={gratitude}
+                                onChange={(e) => setGratitude(e.target.value)}
+                                placeholder="What are you grateful for today?"
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                {entry ? 'Update' : 'Save Entry'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
+    // --- TEMPLATES (Full page layouts) ---
+
     /**
      * Eisenhower Matrix View
      */
@@ -2736,13 +3905,46 @@
                 <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
                     <div className="flex items-center gap-3">
                         <div className="w-12 h-12 bg-indigo-600 rounded-xl flex items-center justify-center text-2xl">
-                            📊
+                            📚
                         </div>
                         <div>
                             <h3 className="font-bold text-white">{CONFIG.APP_NAME}</h3>
                             <p className="text-xs text-slate-400">Version {CONFIG.VERSION}</p>
                         </div>
                     </div>
+                </div>
+                
+                {/* Quick Access */}
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-300">Quick Access</h3>
+                    
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'expenses' })}
+                        className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">💰</span>
+                            <div className="text-left">
+                                <div className="font-medium text-white">Expense Tracker</div>
+                                <div className="text-xs text-slate-400">Manage your budget</div>
+                            </div>
+                        </div>
+                        <span className="text-slate-400">→</span>
+                    </button>
+                    
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'matrix' })}
+                        className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="flex items-center gap-3">
+                            <span className="text-xl">📊</span>
+                            <div className="text-left">
+                                <div className="font-medium text-white">Eisenhower Matrix</div>
+                                <div className="text-xs text-slate-400">Priority quadrants</div>
+                            </div>
+                        </div>
+                        <span className="text-slate-400">→</span>
+                    </button>
                 </div>
                 
                 {/* Data Management */}
@@ -2870,10 +4072,29 @@
      * Dashboard Page
      */
     const DashboardPage = memo(() => {
+        const { state, dispatch } = useApp();
         const [showAddModal, setShowAddModal] = useState(false);
         const [editingHabitId, setEditingHabitId] = useState(null);
         const [focusHabitId, setFocusHabitId] = useState(null);
-        const { dispatch } = useApp();
+        
+        const today = DateUtils.toKey();
+        
+        // Calculate widget stats
+        const todayStudyTime = useMemo(() => {
+            return state.studySessions
+                .filter(s => s.date === today)
+                .reduce((sum, s) => sum + s.duration, 0);
+        }, [state.studySessions, today]);
+        
+        const nextAssignment = useMemo(() => {
+            const pending = state.assignments
+                .filter(a => a.status !== 'completed' && new Date(a.dueDate) >= new Date())
+                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+            return pending[0];
+        }, [state.assignments]);
+        
+        const todayWater = state.waterLog[today] || 0;
+        const todaySleep = state.sleepLog.find(s => s.date === today);
         
         const handleStartFocus = useCallback((habitId) => {
             setFocusHabitId(habitId);
@@ -2883,11 +4104,75 @@
             dispatch({ type: ActionTypes.TOGGLE_HABIT, payload: { id: habitId } });
         }, [dispatch]);
         
+        // Calculate best habit streak
+        const bestStreak = useMemo(() => {
+            const habits = Object.values(state.habits).filter(h => !h.archived);
+            if (habits.length === 0) return { name: 'None', days: 0 };
+            
+            const habitStreaks = habits.map(h => ({
+                name: h.name,
+                days: HabitUtils.calculateStreak(h.data)
+            }));
+            
+            return habitStreaks.reduce((best, current) => 
+                current.days > best.days ? current : best
+            , { name: 'None', days: 0 });
+        }, [state.habits]);
+        
         return (
             <>
                 <StatsOverview />
+                
+                {/* Quick Access Widgets */}
+                <div className="grid grid-cols-2 gap-3 mb-6">
+                    {/* Study Widget */}
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' })}
+                        className="bg-gradient-to-br from-indigo-500/10 to-purple-500/10 rounded-xl p-4 border border-indigo-500/20 text-left hover:from-indigo-500/20 hover:to-purple-500/20 transition-all"
+                    >
+                        <div className="text-2xl mb-1">⏱️</div>
+                        <div className="text-lg font-bold text-white">{Math.floor(todayStudyTime / 60)}h {todayStudyTime % 60}m</div>
+                        <div className="text-xs text-slate-400">Study Today</div>
+                    </button>
+                    
+                    {/* Next Assignment Widget */}
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' })}
+                        className="bg-gradient-to-br from-amber-500/10 to-rose-500/10 rounded-xl p-4 border border-amber-500/20 text-left hover:from-amber-500/20 hover:to-rose-500/20 transition-all"
+                    >
+                        <div className="text-2xl mb-1">📝</div>
+                        <div className="text-sm font-bold text-white truncate">
+                            {nextAssignment ? nextAssignment.title : 'No tasks'}
+                        </div>
+                        <div className="text-xs text-slate-400">
+                            {nextAssignment ? 
+                                `Due ${Math.ceil((new Date(nextAssignment.dueDate) - new Date()) / (1000 * 60 * 60 * 24))}d` 
+                                : 'All clear!'}
+                        </div>
+                    </button>
+                    
+                    {/* Wellness Widget */}
+                    <button
+                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'journal' })}
+                        className="bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 rounded-xl p-4 border border-emerald-500/20 text-left hover:from-emerald-500/20 hover:to-cyan-500/20 transition-all"
+                    >
+                        <div className="text-2xl mb-1">💧</div>
+                        <div className="text-lg font-bold text-white">{todayWater}/{state.waterGoal}</div>
+                        <div className="text-xs text-slate-400">Water Today</div>
+                    </button>
+                    
+                    {/* XP Widget */}
+                    <div className="bg-gradient-to-br from-purple-500/10 to-pink-500/10 rounded-xl p-4 border border-purple-500/20">
+                        <div className="text-2xl mb-1">🏆</div>
+                        <div className="text-lg font-bold text-white">Level {state.level}</div>
+                        <div className="text-xs text-slate-400">{state.xp} XP</div>
+                    </div>
+                </div>
+                
+                {/* Insights Panel */}
                 <InsightsPanel />
                 
+                {/* Today's Habits */}
                 <div className="flex items-center justify-between mb-4">
                     <h2 className="font-bold text-white text-lg">Today's Habits</h2>
                     <button
@@ -2902,6 +4187,19 @@
                     onEdit={setEditingHabitId}
                     onStartFocus={handleStartFocus}
                 />
+                
+                {/* Best Streak Card */}
+                {bestStreak.days > 0 && (
+                    <div className="bg-gradient-to-r from-orange-500/10 to-red-500/10 rounded-xl p-4 border border-orange-500/20 mt-6">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-sm text-slate-400 mb-1">🔥 Current Best Streak</div>
+                                <div className="text-lg font-bold text-white">{bestStreak.name}</div>
+                            </div>
+                            <div className="text-3xl font-bold text-orange-400">{bestStreak.days}d</div>
+                        </div>
+                    </div>
+                )}
                 
                 {/* Modals */}
                 {showAddModal && (
@@ -2923,6 +4221,749 @@
                     />
                 )}
             </>
+        );
+    });
+
+    /**
+     * Study View - Study sessions, assignments, and timetable
+     */
+    const StudyView = memo(() => {
+        const { state, dispatch } = useApp();
+        const [activeTab, setActiveTab] = useState('timer'); // timer, assignments, timetable
+        const [showStudyTimer, setShowStudyTimer] = useState(false);
+        const [showAssignmentModal, setShowAssignmentModal] = useState(false);
+        const [editingAssignment, setEditingAssignment] = useState(null);
+        
+        // Calculate today's study time
+        const todayStudyTime = useMemo(() => {
+            const today = DateUtils.toKey();
+            return state.studySessions
+                .filter(s => s.date === today)
+                .reduce((sum, s) => sum + s.duration, 0);
+        }, [state.studySessions]);
+        
+        // Get pending assignments
+        const pendingAssignments = useMemo(() => {
+            return state.assignments
+                .filter(a => a.status !== 'completed')
+                .sort((a, b) => new Date(a.dueDate) - new Date(b.dueDate));
+        }, [state.assignments]);
+        
+        // Calculate days until due
+        const getDaysUntil = (dueDate) => {
+            const days = Math.ceil((new Date(dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+            return days;
+        };
+        
+        const getUrgencyColor = (daysUntil) => {
+            if (daysUntil < 0) return 'text-slate-500';
+            if (daysUntil <= 1) return 'text-rose-400';
+            if (daysUntil <= 3) return 'text-amber-400';
+            return 'text-emerald-400';
+        };
+        
+        return (
+            <div className="space-y-6">
+                {/* Header */}
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">📚 Study Hub</h2>
+                    <p className="text-slate-400 text-sm">Track study sessions, manage assignments, and view your timetable</p>
+                </div>
+                
+                {/* Tab Navigation */}
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl">
+                    {[
+                        { id: 'timer', label: 'Study Timer', icon: '⏱️' },
+                        { id: 'assignments', label: 'Assignments', icon: '📝' },
+                        { id: 'timetable', label: 'Timetable', icon: '📅' }
+                    ].map(tab => (
+                        <button
+                            key={tab.id}
+                            onClick={() => setActiveTab(tab.id)}
+                            className={`flex-1 py-2 px-4 rounded-lg text-sm font-medium transition-all ${
+                                activeTab === tab.id
+                                    ? 'bg-indigo-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            <span className="mr-2">{tab.icon}</span>
+                            {tab.label}
+                        </button>
+                    ))}
+                </div>
+                
+                {/* Content */}
+                {activeTab === 'timer' && (
+                    <div className="space-y-4">
+                        <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                            <div className="text-center py-8">
+                                <div className="text-4xl mb-4">⏱️</div>
+                                <h3 className="text-lg font-semibold text-white mb-2">Study Timer</h3>
+                                <p className="text-slate-400 mb-4">Track your study sessions with Pomodoro support</p>
+                                <button
+                                    onClick={() => setShowStudyTimer(true)}
+                                    className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors"
+                                >
+                                    Start Study Session
+                                </button>
+                            </div>
+                        </div>
+                        
+                        {/* Recent Sessions */}
+                        {state.studySessions.length > 0 && (
+                            <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                <h4 className="text-sm font-semibold text-white mb-3">Recent Sessions</h4>
+                                <div className="space-y-2">
+                                    {state.studySessions.slice(-5).reverse().map(session => (
+                                        <div key={session.id} className="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
+                                            <div>
+                                                <div className="text-sm font-medium text-white">{session.subject}</div>
+                                                <div className="text-xs text-slate-400">{session.date}</div>
+                                            </div>
+                                            <div className="text-sm font-semibold text-indigo-400">{session.duration}m</div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {activeTab === 'assignments' && (
+                    <div className="space-y-4">
+                        <div className="flex justify-end">
+                            <button
+                                onClick={() => {
+                                    setEditingAssignment(null);
+                                    setShowAssignmentModal(true);
+                                }}
+                                className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium transition-colors"
+                            >
+                                + Add Assignment
+                            </button>
+                        </div>
+                        
+                        {pendingAssignments.length > 0 ? (
+                            <div className="space-y-3">
+                                {pendingAssignments.map(assignment => {
+                                    const daysUntil = getDaysUntil(assignment.dueDate);
+                                    return (
+                                        <div key={assignment.id} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                            <div className="flex items-start justify-between mb-2">
+                                                <div className="flex-1">
+                                                    <div className="flex items-center gap-2 mb-1">
+                                                        <span className="text-lg">
+                                                            {assignment.type === 'exam' ? '📝' : '📄'}
+                                                        </span>
+                                                        <h4 className="text-sm font-semibold text-white">{assignment.title}</h4>
+                                                    </div>
+                                                    <div className="text-xs text-slate-400">{assignment.subject}</div>
+                                                </div>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditingAssignment(assignment);
+                                                        setShowAssignmentModal(true);
+                                                    }}
+                                                    className="text-slate-400 hover:text-white text-sm"
+                                                >
+                                                    Edit
+                                                </button>
+                                            </div>
+                                            <div className="flex items-center justify-between mt-3">
+                                                <span className={`text-xs font-medium ${getUrgencyColor(daysUntil)}`}>
+                                                    {daysUntil < 0 ? 'Overdue' : daysUntil === 0 ? 'Due today' : `${daysUntil} days left`}
+                                                </span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className={`text-xs px-2 py-1 rounded ${
+                                                        assignment.priority === 'high' ? 'bg-rose-500/20 text-rose-400' :
+                                                        assignment.priority === 'medium' ? 'bg-amber-500/20 text-amber-400' :
+                                                        'bg-slate-500/20 text-slate-400'
+                                                    }`}>
+                                                        {assignment.priority}
+                                                    </span>
+                                                    <button
+                                                        onClick={() => {
+                                                            dispatch({
+                                                                type: ActionTypes.UPDATE_ASSIGNMENT,
+                                                                payload: { id: assignment.id, updates: { status: 'completed' } }
+                                                            });
+                                                            showToast('Assignment completed! +30 XP', 'success');
+                                                        }}
+                                                        className="text-xs px-3 py-1 bg-emerald-500 hover:bg-emerald-600 text-white rounded transition-colors"
+                                                    >
+                                                        Complete
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        ) : (
+                            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                                <div className="text-4xl mb-4">📝</div>
+                                <h3 className="text-lg font-semibold text-white mb-2">No Assignments</h3>
+                                <p className="text-slate-400 mb-4">Add your first assignment to get started</p>
+                            </div>
+                        )}
+                    </div>
+                )}
+                
+                {activeTab === 'timetable' && (
+                    <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-4">📅</div>
+                            <h3 className="text-lg font-semibold text-white mb-2">Weekly Timetable</h3>
+                            <p className="text-slate-400 mb-4">Manage your class schedule</p>
+                            <button className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors">
+                                Add Class
+                            </button>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Quick Stats */}
+                <div className="grid grid-cols-2 gap-4">
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="text-2xl font-bold text-indigo-400">{Math.floor(todayStudyTime / 60)}h {todayStudyTime % 60}m</div>
+                        <div className="text-sm text-slate-400">Today's Study Time</div>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="text-2xl font-bold text-amber-400">{pendingAssignments.length}</div>
+                        <div className="text-sm text-slate-400">Pending Tasks</div>
+                    </div>
+                </div>
+                
+                {/* Modals */}
+                {showStudyTimer && <StudyTimer onClose={() => setShowStudyTimer(false)} />}
+                {showAssignmentModal && (
+                    <AssignmentModal
+                        assignment={editingAssignment}
+                        onClose={() => {
+                            setShowAssignmentModal(false);
+                            setEditingAssignment(null);
+                        }}
+                    />
+                )}
+            </div>
+        );
+    });
+
+    /**
+     * Journal View - Daily journaling and mood tracking
+     */
+    const JournalView = memo(() => {
+        const { state, dispatch } = useApp();
+        const today = DateUtils.toKey();
+        const todayEntry = state.journalEntries.find(e => e.date === today);
+        const [showJournalModal, setShowJournalModal] = useState(false);
+        const [showWellnessModal, setShowWellnessModal] = useState(null); // 'sleep', 'water', 'exercise', 'mood'
+        
+        // Calculate wellness stats
+        const todayWater = state.waterLog[today] || 0;
+        const todaySleep = state.sleepLog.find(s => s.date === today);
+        const todayExercise = state.exerciseLog.filter(e => e.date === today);
+        const todayMood = state.moodLog[today];
+        const todayExerciseTime = todayExercise.reduce((sum, e) => sum + e.duration, 0);
+        
+        // Calculate journal streak
+        const journalStreak = useMemo(() => {
+            let streak = 0;
+            let currentDate = new Date();
+            
+            while (true) {
+                const dateKey = DateUtils.toKey(currentDate);
+                const hasEntry = state.journalEntries.some(e => e.date === dateKey);
+                
+                if (!hasEntry) break;
+                streak++;
+                currentDate.setDate(currentDate.getDate() - 1);
+            }
+            
+            return streak;
+        }, [state.journalEntries]);
+        
+        return (
+            <div className="space-y-6">
+                {/* Header */}
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">📓 Daily Journal</h2>
+                    <p className="text-slate-400 text-sm">Reflect on your day and track your wellness</p>
+                </div>
+                
+                {/* Wellness Quick Stats */}
+                <div className="grid grid-cols-4 gap-3">
+                    <button
+                        onClick={() => setShowWellnessModal('sleep')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="text-2xl mb-1">💤</div>
+                        <div className="text-xs text-slate-400">Sleep</div>
+                        <div className="text-sm font-semibold text-white">
+                            {todaySleep ? `${todaySleep.hours}h` : '-'}
+                        </div>
+                    </button>
+                    <button
+                        onClick={() => setShowWellnessModal('water')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="text-2xl mb-1">💧</div>
+                        <div className="text-xs text-slate-400">Water</div>
+                        <div className="text-sm font-semibold text-white">{todayWater}/{state.waterGoal}</div>
+                    </button>
+                    <button
+                        onClick={() => setShowWellnessModal('exercise')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="text-2xl mb-1">🏃</div>
+                        <div className="text-xs text-slate-400">Exercise</div>
+                        <div className="text-sm font-semibold text-white">{todayExerciseTime}m</div>
+                    </button>
+                    <button
+                        onClick={() => setShowWellnessModal('mood')}
+                        className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 text-center hover:bg-slate-800 transition-colors"
+                    >
+                        <div className="text-2xl mb-1">{todayMood?.mood ? CONFIG.MOODS[todayMood.mood] : '😐'}</div>
+                        <div className="text-xs text-slate-400">Mood</div>
+                        <div className="text-sm font-semibold text-white">
+                            {todayMood ? `${todayMood.energy}/5` : '-'}
+                        </div>
+                    </button>
+                </div>
+                
+                {/* Journal Entry */}
+                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700">
+                    {todayEntry ? (
+                        <div>
+                            <div className="flex items-center justify-between mb-4">
+                                <div className="flex items-center gap-3">
+                                    <span className="text-2xl">{CONFIG.MOODS[todayEntry.mood]}</span>
+                                    <div>
+                                        <h3 className="text-lg font-semibold text-white">Today's Entry</h3>
+                                        <p className="text-xs text-slate-400">{todayEntry.wordCount} words</p>
+                                    </div>
+                                </div>
+                                <button
+                                    onClick={() => setShowJournalModal(true)}
+                                    className="text-indigo-400 hover:text-indigo-300 text-sm font-medium"
+                                >
+                                    Edit
+                                </button>
+                            </div>
+                            <p className="text-slate-300 whitespace-pre-wrap mb-3">{todayEntry.content}</p>
+                            {todayEntry.gratitude && (
+                                <div className="bg-indigo-500/10 rounded-lg p-3 border border-indigo-500/20">
+                                    <div className="text-xs text-indigo-400 font-medium mb-1">Grateful for:</div>
+                                    <div className="text-sm text-white">{todayEntry.gratitude}</div>
+                                </div>
+                            )}
+                        </div>
+                    ) : (
+                        <div className="text-center py-8">
+                            <div className="text-4xl mb-4">✍️</div>
+                            <h3 className="text-lg font-semibold text-white mb-2">No Entry Yet</h3>
+                            <p className="text-slate-400 mb-4">Start journaling to track your thoughts and progress</p>
+                            <button
+                                onClick={() => setShowJournalModal(true)}
+                                className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors"
+                            >
+                                Write Entry
+                            </button>
+                        </div>
+                    )}
+                </div>
+                
+                {/* Streak & Recent Entries */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div className="bg-gradient-to-br from-purple-500/10 to-indigo-500/10 rounded-xl p-4 border border-purple-500/20">
+                        <div className="flex items-center justify-between">
+                            <div>
+                                <div className="text-2xl font-bold text-purple-400">{journalStreak} days</div>
+                                <div className="text-sm text-slate-400">Journal Streak</div>
+                            </div>
+                            <div className="text-4xl">🔥</div>
+                        </div>
+                    </div>
+                    
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="text-sm font-semibold text-white mb-2">Total Entries</div>
+                        <div className="text-2xl font-bold text-indigo-400">{state.journalEntries.length}</div>
+                    </div>
+                </div>
+                
+                {/* Recent Entries */}
+                {state.journalEntries.length > 1 && (
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <h4 className="text-sm font-semibold text-white mb-3">Recent Entries</h4>
+                        <div className="space-y-2">
+                            {state.journalEntries
+                                .sort((a, b) => new Date(b.date) - new Date(a.date))
+                                .slice(1, 6)
+                                .map(entry => (
+                                    <div key={entry.id} className="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xl">{CONFIG.MOODS[entry.mood]}</span>
+                                            <div>
+                                                <div className="text-sm font-medium text-white">{entry.date}</div>
+                                                <div className="text-xs text-slate-400">{entry.wordCount} words</div>
+                                            </div>
+                                        </div>
+                                        <button className="text-xs text-indigo-400 hover:text-indigo-300">View</button>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* Modals */}
+                {showJournalModal && (
+                    <JournalEntryModal
+                        entry={todayEntry}
+                        onClose={() => setShowJournalModal(false)}
+                    />
+                )}
+                {showWellnessModal && (
+                    <WellnessModal
+                        type={showWellnessModal}
+                        onClose={() => setShowWellnessModal(null)}
+                    />
+                )}
+            </div>
+        );
+    });
+
+    /**
+     * Expense Modal - Add/Edit Expense
+     */
+    const ExpenseModal = memo(({ expense, onClose }) => {
+        const { state, dispatch } = useApp();
+        const [amount, setAmount] = useState(expense?.amount || '');
+        const [category, setCategory] = useState(expense?.category || state.expenseCategories[0]);
+        const [description, setDescription] = useState(expense?.description || '');
+        const [date, setDate] = useState(expense?.date || DateUtils.toKey());
+        
+        const handleSubmit = (e) => {
+            e.preventDefault();
+            if (!amount || parseFloat(amount) <= 0) return;
+            
+            if (expense) {
+                dispatch({
+                    type: ActionTypes.UPDATE_EXPENSE,
+                    payload: {
+                        id: expense.id,
+                        updates: {
+                            amount: parseFloat(amount),
+                            category,
+                            description: description.trim(),
+                            date
+                        }
+                    }
+                });
+                showToast('Expense updated', 'success');
+            } else {
+                dispatch({
+                    type: ActionTypes.ADD_EXPENSE,
+                    payload: {
+                        amount: parseFloat(amount),
+                        category,
+                        description: description.trim(),
+                        date
+                    }
+                });
+                showToast('Expense tracked! +2 XP', 'success');
+            }
+            onClose();
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
+                <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
+                    <h3 className="text-xl font-bold text-white mb-4">
+                        {expense ? 'Edit Expense' : '💰 Add Expense'}
+                    </h3>
+                    
+                    <form onSubmit={handleSubmit} className="space-y-4">
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Amount *</label>
+                            <div className="relative">
+                                <span className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400">$</span>
+                                <input
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    placeholder="0.00"
+                                    className="w-full pl-8 pr-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                                    required
+                                />
+                            </div>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Category</label>
+                            <select
+                                value={category}
+                                onChange={(e) => setCategory(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            >
+                                {state.expenseCategories.map(cat => (
+                                    <option key={cat} value={cat}>{cat}</option>
+                                ))}
+                            </select>
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                            <input
+                                type="text"
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="e.g., Lunch at cafeteria"
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Date</label>
+                            <input
+                                type="date"
+                                value={date}
+                                onChange={(e) => setDate(e.target.value)}
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
+                            />
+                        </div>
+                        
+                        <div className="flex gap-3 pt-4">
+                            <button
+                                type="button"
+                                onClick={onClose}
+                                className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                            >
+                                Cancel
+                            </button>
+                            <button
+                                type="submit"
+                                className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                            >
+                                {expense ? 'Update' : 'Add'}
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </div>
+        );
+    });
+
+    /**
+     * Expense Tracker View
+     */
+    const ExpenseView = memo(() => {
+        const { state, dispatch } = useApp();
+        const [showExpenseModal, setShowExpenseModal] = useState(false);
+        const [editingExpense, setEditingExpense] = useState(null);
+        const [timeFilter, setTimeFilter] = useState('month'); // day, week, month
+        
+        // Calculate filtered expenses
+        const filteredExpenses = useMemo(() => {
+            const now = new Date();
+            const today = DateUtils.toKey();
+            
+            return state.expenses.filter(e => {
+                if (timeFilter === 'day') return e.date === today;
+                if (timeFilter === 'week') {
+                    const expenseDate = new Date(e.date);
+                    const weekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                    return expenseDate >= weekAgo;
+                }
+                if (timeFilter === 'month') {
+                    const expenseDate = new Date(e.date);
+                    return expenseDate.getMonth() === now.getMonth() && 
+                           expenseDate.getFullYear() === now.getFullYear();
+                }
+                return true;
+            }).sort((a, b) => new Date(b.date) - new Date(a.date));
+        }, [state.expenses, timeFilter]);
+        
+        // Calculate total and category breakdown
+        const stats = useMemo(() => {
+            const total = filteredExpenses.reduce((sum, e) => sum + e.amount, 0);
+            const byCategory = {};
+            
+            filteredExpenses.forEach(e => {
+                byCategory[e.category] = (byCategory[e.category] || 0) + e.amount;
+            });
+            
+            return { total, byCategory };
+        }, [filteredExpenses]);
+        
+        const budgetRemaining = state.monthlyBudget - stats.total;
+        const budgetPercentage = (stats.total / state.monthlyBudget) * 100;
+        
+        const getCategoryIcon = (category) => {
+            const icons = {
+                'Food': '🍔',
+                'Transport': '🚗',
+                'Books': '📚',
+                'Entertainment': '🎮',
+                'Subscriptions': '💳',
+                'Health': '⚕️',
+                'Other': '📦'
+            };
+            return icons[category] || '💰';
+        };
+        
+        return (
+            <div className="space-y-6">
+                {/* Header */}
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-2">💰 Expense Tracker</h2>
+                    <p className="text-slate-400 text-sm">Track your spending and stay within budget</p>
+                </div>
+                
+                {/* Budget Overview */}
+                <div className="bg-gradient-to-br from-emerald-500/10 to-cyan-500/10 rounded-xl p-6 border border-emerald-500/20">
+                    <div className="flex items-center justify-between mb-3">
+                        <div>
+                            <div className="text-sm text-slate-400 mb-1">Monthly Budget</div>
+                            <div className="text-3xl font-bold text-white">${stats.total.toFixed(2)}</div>
+                            <div className="text-sm text-slate-400">of ${state.monthlyBudget}</div>
+                        </div>
+                        <div className="text-right">
+                            <div className="text-sm text-slate-400 mb-1">Remaining</div>
+                            <div className={`text-2xl font-bold ${
+                                budgetRemaining >= 0 ? 'text-emerald-400' : 'text-rose-400'
+                            }`}>
+                                ${Math.abs(budgetRemaining).toFixed(2)}
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Progress Bar */}
+                    <div className="bg-slate-800 rounded-full h-3 overflow-hidden">
+                        <div
+                            className={`h-full transition-all duration-500 ${
+                                budgetPercentage >= 100 ? 'bg-rose-500' :
+                                budgetPercentage >= 80 ? 'bg-amber-500' :
+                                'bg-emerald-500'
+                            }`}
+                            style={{ width: `${Math.min(budgetPercentage, 100)}%` }}
+                        />
+                    </div>
+                    <div className="text-xs text-slate-400 mt-1 text-right">{budgetPercentage.toFixed(0)}% used</div>
+                </div>
+                
+                {/* Time Filter */}
+                <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl">
+                    {[
+                        { id: 'day', label: 'Today' },
+                        { id: 'week', label: 'Week' },
+                        { id: 'month', label: 'Month' }
+                    ].map(filter => (
+                        <button
+                            key={filter.id}
+                            onClick={() => setTimeFilter(filter.id)}
+                            className={`flex-1 py-2 rounded-lg text-sm font-medium transition-all ${
+                                timeFilter === filter.id
+                                    ? 'bg-indigo-500 text-white'
+                                    : 'text-slate-400 hover:text-white'
+                            }`}
+                        >
+                            {filter.label}
+                        </button>
+                    ))}
+                </div>
+                
+                {/* Category Breakdown */}
+                {Object.keys(stats.byCategory).length > 0 && (
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <h4 className="text-sm font-semibold text-white mb-3">Category Breakdown</h4>
+                        <div className="space-y-2">
+                            {Object.entries(stats.byCategory)
+                                .sort(([, a], [, b]) => b - a)
+                                .map(([category, amount]) => (
+                                    <div key={category} className="flex items-center gap-3">
+                                        <span className="text-xl">{getCategoryIcon(category)}</span>
+                                        <div className="flex-1">
+                                            <div className="flex items-center justify-between mb-1">
+                                                <span className="text-sm text-white">{category}</span>
+                                                <span className="text-sm font-semibold text-white">${amount.toFixed(2)}</span>
+                                            </div>
+                                            <div className="bg-slate-700 rounded-full h-1.5 overflow-hidden">
+                                                <div
+                                                    className="h-full bg-indigo-500"
+                                                    style={{ width: `${(amount / stats.total) * 100}%` }}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                ))}
+                        </div>
+                    </div>
+                )}
+                
+                {/* Add Expense Button */}
+                <button
+                    onClick={() => {
+                        setEditingExpense(null);
+                        setShowExpenseModal(true);
+                    }}
+                    className="w-full py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium transition-colors"
+                >
+                    + Add Expense
+                </button>
+                
+                {/* Recent Expenses */}
+                {filteredExpenses.length > 0 ? (
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <h4 className="text-sm font-semibold text-white mb-3">Recent Expenses</h4>
+                        <div className="space-y-2">
+                            {filteredExpenses.slice(0, 10).map(expense => (
+                                <div key={expense.id} className="flex items-center justify-between py-2 border-b border-slate-700 last:border-0">
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-xl">{getCategoryIcon(expense.category)}</span>
+                                        <div>
+                                            <div className="text-sm font-medium text-white">
+                                                {expense.description || expense.category}
+                                            </div>
+                                            <div className="text-xs text-slate-400">{expense.date}</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm font-semibold text-white">${expense.amount.toFixed(2)}</span>
+                                        <button
+                                            onClick={() => {
+                                                setEditingExpense(expense);
+                                                setShowExpenseModal(true);
+                                            }}
+                                            className="text-xs text-indigo-400 hover:text-indigo-300"
+                                        >
+                                            Edit
+                                        </button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                ) : (
+                    <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                        <div className="text-4xl mb-4">💰</div>
+                        <h3 className="text-lg font-semibold text-white mb-2">No Expenses Yet</h3>
+                        <p className="text-slate-400">Start tracking your spending to stay within budget</p>
+                    </div>
+                )}
+                
+                {/* Modal */}
+                {showExpenseModal && (
+                    <ExpenseModal
+                        expense={editingExpense}
+                        onClose={() => {
+                            setShowExpenseModal(false);
+                            setEditingExpense(null);
+                        }}
+                    />
+                )}
+            </div>
         );
     });
 
@@ -2950,9 +4991,12 @@
         // View components
         const viewComponents = {
             dashboard: DashboardPage,
-            matrix: MatrixView,
+            study: StudyView,
             analytics: AnalyticsView,
-            settings: SettingsView
+            journal: JournalView,
+            expenses: ExpenseView,
+            settings: SettingsView,
+            matrix: MatrixView // Keep matrix for backward compatibility
         };
         
         const CurrentView = viewComponents[state.view] || DashboardPage;
@@ -2985,10 +5029,10 @@
                     {/* Header */}
                     <header className="sticky top-0 z-40 bg-slate-900/95 backdrop-blur-lg border-b border-slate-800">
                         <div className="max-w-2xl mx-auto px-4 py-3">
-                                                        <div className="flex items-center justify-between">
+                            <div className="flex items-center justify-between">
                                 <div className="flex items-center gap-3">
                                     <div className="w-10 h-10 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-xl flex items-center justify-center text-xl shadow-lg shadow-indigo-500/20">
-                                        📊
+                                        📚
                                     </div>
                                     <div>
                                         <h1 className="font-bold text-white text-lg">{CONFIG.APP_NAME}</h1>
@@ -2998,29 +5042,51 @@
                                     </div>
                                 </div>
                                 
-                                {/* Undo/Redo Buttons */}
-                                <div className="flex items-center gap-1">
-                                    <IconButton
-                                        icon="↩️"
-                                        label="Undo (Ctrl+Z)"
-                                        onClick={() => {
-                                            dispatch({ type: ActionTypes.UNDO });
-                                            showToast('Undone');
-                                        }}
-                                        disabled={state.undoStack.length === 0}
-                                        size="sm"
-                                    />
-                                    <IconButton
-                                        icon="↪️"
-                                        label="Redo (Ctrl+Shift+Z)"
-                                        onClick={() => {
-                                            dispatch({ type: ActionTypes.REDO });
-                                            showToast('Redone');
-                                        }}
-                                        disabled={state.redoStack.length === 0}
-                                        size="sm"
-                                    />
+                                <div className="flex items-center gap-2">
+                                    {/* XP/Level Indicator */}
+                                    <div className="hidden sm:flex flex-col items-end">
+                                        <div className="text-xs text-indigo-400 font-semibold">
+                                            Level {state.level}
+                                        </div>
+                                        <div className="text-xs text-slate-500">
+                                            {state.xp} XP
+                                        </div>
+                                    </div>
+                                    
+                                    {/* Undo/Redo Buttons */}
+                                    <div className="flex items-center gap-1">
+                                        <IconButton
+                                            icon="↩️"
+                                            label="Undo (Ctrl+Z)"
+                                            onClick={() => {
+                                                dispatch({ type: ActionTypes.UNDO });
+                                                showToast('Undone');
+                                            }}
+                                            disabled={state.undoStack.length === 0}
+                                            size="sm"
+                                        />
+                                        <IconButton
+                                            icon="↪️"
+                                            label="Redo (Ctrl+Shift+Z)"
+                                            onClick={() => {
+                                                dispatch({ type: ActionTypes.REDO });
+                                                showToast('Redone');
+                                            }}
+                                            disabled={state.redoStack.length === 0}
+                                            size="sm"
+                                        />
+                                    </div>
                                 </div>
+                            </div>
+                            
+                            {/* XP Progress Bar */}
+                            <div className="mt-2 bg-slate-800 rounded-full h-1.5 overflow-hidden">
+                                <div 
+                                    className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500"
+                                    style={{ 
+                                        width: `${((state.xp % (state.level * state.level * CONFIG.XP_PER_LEVEL)) / (state.level * state.level * CONFIG.XP_PER_LEVEL)) * 100}%` 
+                                    }}
+                                />
                             </div>
                         </div>
                     </header>
@@ -3040,18 +5106,19 @@
                         role="navigation"
                         aria-label="Main navigation"
                     >
-                        <div className="max-w-2xl mx-auto px-4">
+                        <div className="max-w-2xl mx-auto px-2">
                             <div className="flex items-center justify-around py-2">
                                 {[
-                                    { id: 'dashboard', icon: '📋', label: 'Dashboard' },
-                                    { id: 'matrix', icon: '📊', label: 'Matrix' },
-                                    { id: 'analytics', icon: '📈', label: 'Analytics' },
+                                    { id: 'dashboard', icon: '📋', label: 'Home' },
+                                    { id: 'study', icon: '📚', label: 'Study' },
+                                    { id: 'analytics', icon: '📊', label: 'Stats' },
+                                    { id: 'journal', icon: '📓', label: 'Journal' },
                                     { id: 'settings', icon: '⚙️', label: 'Settings' }
                                 ].map((item) => (
                                     <button
                                         key={item.id}
                                         onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: item.id })}
-                                        className={`flex flex-col items-center gap-1 px-4 py-2 rounded-xl transition-all touch-target ${
+                                        className={`flex flex-col items-center gap-1 px-3 py-2 rounded-xl transition-all touch-target ${
                                             state.view === item.id
                                                 ? 'text-indigo-400 bg-indigo-500/10'
                                                 : 'text-slate-400 hover:text-slate-200'
