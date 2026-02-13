@@ -3090,7 +3090,16 @@
         const [notes, setNotes] = useState(entry?.notes || '');
         
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
-        const colors = ['bg-indigo-500', 'bg-purple-500', 'bg-pink-500', 'bg-rose-500', 'bg-orange-500', 'bg-amber-500', 'bg-emerald-500', 'bg-cyan-500'];
+        const colorSchemes = [
+            { bg: 'bg-indigo-500', border: 'border-indigo-500' },
+            { bg: 'bg-purple-500', border: 'border-purple-500' },
+            { bg: 'bg-pink-500', border: 'border-pink-500' },
+            { bg: 'bg-rose-500', border: 'border-rose-500' },
+            { bg: 'bg-orange-500', border: 'border-orange-500' },
+            { bg: 'bg-amber-500', border: 'border-amber-500' },
+            { bg: 'bg-emerald-500', border: 'border-emerald-500' },
+            { bg: 'bg-cyan-500', border: 'border-cyan-500' }
+        ];
         
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -3106,7 +3115,7 @@
                 });
                 showToast('Class updated', 'success');
             } else {
-                const color = colors[Math.floor(Math.random() * colors.length)];
+                const colorScheme = colorSchemes[Math.floor(Math.random() * colorSchemes.length)];
                 dispatch({
                     type: ActionTypes.ADD_TIMETABLE_ENTRY,
                     payload: {
@@ -3115,7 +3124,8 @@
                         startTime,
                         endTime,
                         room,
-                        color,
+                        color: colorScheme.bg,
+                        borderColor: colorScheme.border,
                         notes
                     }
                 });
@@ -4408,6 +4418,17 @@
             return 'text-emerald-400';
         };
         
+        // Group timetable entries by day
+        const timetableByDay = useMemo(() => {
+            const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            return days.map(day => ({
+                day,
+                classes: state.timetable
+                    .filter(c => c.day === day)
+                    .sort((a, b) => a.startTime.localeCompare(b.startTime))
+            })).filter(d => d.classes.length > 0);
+        }, [state.timetable]);
+        
         return (
             <div className="space-y-6">
                 {/* Header */}
@@ -4566,20 +4587,15 @@
                         
                         {state.timetable.length > 0 ? (
                             <div className="space-y-3">
-                                {['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'].map(day => {
-                                    const dayClasses = state.timetable.filter(c => c.day === day).sort((a, b) => a.startTime.localeCompare(b.startTime));
-                                    
-                                    if (dayClasses.length === 0) return null;
-                                    
-                                    return (
-                                        <div key={day} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
-                                            <h4 className="text-sm font-semibold text-slate-300 mb-3">{day}</h4>
-                                            <div className="space-y-2">
-                                                {dayClasses.map(cls => (
-                                                    <div
-                                                        key={cls.id}
-                                                        className={`${cls.color} bg-opacity-20 border border-opacity-50 ${cls.color.replace('bg-', 'border-')} rounded-lg p-3`}
-                                                    >
+                                {timetableByDay.map(({ day, classes }) => (
+                                    <div key={day} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                                        <h4 className="text-sm font-semibold text-slate-300 mb-3">{day}</h4>
+                                        <div className="space-y-2">
+                                            {classes.map(cls => (
+                                                <div
+                                                    key={cls.id}
+                                                    className={`${cls.color} bg-opacity-20 border border-opacity-50 ${cls.borderColor || cls.color.replace('bg-', 'border-')} rounded-lg p-3`}
+                                                >
                                                         <div className="flex items-start justify-between">
                                                             <div className="flex-1">
                                                                 <div className="font-medium text-white">{cls.subject}</div>
@@ -4624,8 +4640,7 @@
                                                 ))}
                                             </div>
                                         </div>
-                                    );
-                                })}
+                                    ))}
                             </div>
                         ) : (
                             <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
