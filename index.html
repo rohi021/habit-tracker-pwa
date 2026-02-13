@@ -2645,8 +2645,10 @@
                     dispatch({ type: ActionTypes.END_FOCUS });
                 }
                 
-                // 1-4 = Switch views
-                if (!e.metaKey && !e.ctrlKey && !e.altKey) {
+                // 1-5 = Switch views (only when not typing in an input)
+                const activeTag = document.activeElement?.tagName?.toLowerCase();
+                const isTyping = activeTag === 'input' || activeTag === 'textarea' || activeTag === 'select' || document.activeElement?.isContentEditable;
+                if (!e.metaKey && !e.ctrlKey && !e.altKey && !isTyping) {
                     const viewMap = { '1': 'dashboard', '2': 'command', '3': 'analytics', '4': 'study', '5': 'settings' };
                     if (viewMap[e.key]) {
                         dispatch({ type: ActionTypes.SET_VIEW, payload: viewMap[e.key] });
