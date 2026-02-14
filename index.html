@@ -4007,6 +4007,14 @@
         const [timerMode, setTimerMode] = useState('regular'); // regular or pomodoro
         const [timeElapsed, setTimeElapsed] = useState(0);
         const [isRunning, setIsRunning] = useState(false);
+        const [showSubjectManager, setShowSubjectManager] = useState(false);
+        
+        // Update selected subject when subjects list changes (e.g. after adding a new subject)
+        useEffect(() => {
+            if (!selectedSubject && subjectNames.length > 0) {
+                setSelectedSubject(subjectNames[0]);
+            }
+        }, [subjectNames.length]);
         
         useEffect(() => {
             let interval;
@@ -4050,6 +4058,7 @@
         };
         
         return (
+            <>
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
                 <div className="w-full max-w-md mx-4 bg-slate-900 rounded-2xl p-6 border border-slate-700">
                     <h3 className="text-xl font-bold text-white mb-4">Study Timer</h3>
@@ -4064,11 +4073,18 @@
                                     className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
                                 >
                                     {subjectNames.length === 0 ? (
-                                        <option value="">Add subjects in Settings first</option>
+                                        <option value="">No subjects yet — add your courses below</option>
                                     ) : subjectNames.map(subject => (
                                         <option key={subject} value={subject}>{subject}</option>
                                     ))}
                                 </select>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSubjectManager(true)}
+                                    className="mt-2 w-full py-2 text-sm text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg border border-indigo-500/20 transition-colors"
+                                >
+                                    {subjectNames.length === 0 ? '+ Add Your Courses' : '✏️ Manage Subjects'}
+                                </button>
                             </div>
                             
                             <div className="mb-6">
@@ -4137,6 +4153,10 @@
                     </div>
                 </div>
             </div>
+            {showSubjectManager && (
+                <SubjectManagerModal onClose={() => setShowSubjectManager(false)} />
+            )}
+            </>
         );
     });
 
@@ -4153,6 +4173,14 @@
         const [priority, setPriority] = useState(assignment?.priority || 'medium');
         const [progress, setProgress] = useState(assignment?.progress || 0);
         const [description, setDescription] = useState(assignment?.description || '');
+        const [showSubjectManager, setShowSubjectManager] = useState(false);
+        
+        // Update selected subject when subjects list changes (e.g. after adding a new subject)
+        useEffect(() => {
+            if (!subject && subjectNames.length > 0) {
+                setSubject(subjectNames[0]);
+            }
+        }, [subjectNames.length]);
         
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -4189,6 +4217,7 @@
         };
         
         return (
+            <>
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
                     <h3 className="text-xl font-bold text-white mb-4">
@@ -4217,11 +4246,18 @@
                                     className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
                                 >
                                     {subjectNames.length === 0 ? (
-                                        <option value="">Add subjects first</option>
+                                        <option value="">No subjects yet</option>
                                     ) : subjectNames.map(s => (
                                         <option key={s} value={s}>{s}</option>
                                     ))}
                                 </select>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSubjectManager(true)}
+                                    className="mt-1 text-xs text-indigo-400 hover:text-indigo-300"
+                                >
+                                    {subjectNames.length === 0 ? '+ Add Courses' : '✏️ Manage'}
+                                </button>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
@@ -4303,6 +4339,10 @@
                     </form>
                 </div>
             </div>
+            {showSubjectManager && (
+                <SubjectManagerModal onClose={() => setShowSubjectManager(false)} />
+            )}
+            </>
         );
     });
 
@@ -4318,6 +4358,14 @@
         const [endTime, setEndTime] = useState(entry?.endTime || '10:00');
         const [room, setRoom] = useState(entry?.room || '');
         const [notes, setNotes] = useState(entry?.notes || '');
+        const [showSubjectManager, setShowSubjectManager] = useState(false);
+        
+        // Update selected subject when subjects list changes (e.g. after adding a new subject)
+        useEffect(() => {
+            if (!subject && subjectNames.length > 0) {
+                setSubject(subjectNames[0]);
+            }
+        }, [subjectNames.length]);
         
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         
@@ -4352,6 +4400,7 @@
         };
         
         return (
+            <>
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
                     <h3 className="text-xl font-bold text-white mb-4">
@@ -4367,11 +4416,18 @@
                                 className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
                             >
                                 {subjectNames.length === 0 ? (
-                                    <option value="">Add subjects in Settings first</option>
+                                    <option value="">No subjects yet — add your courses below</option>
                                 ) : subjectNames.map(s => (
                                     <option key={s} value={s}>{s}</option>
                                 ))}
                             </select>
+                            <button
+                                type="button"
+                                onClick={() => setShowSubjectManager(true)}
+                                className="mt-2 w-full py-2 text-sm text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg border border-indigo-500/20 transition-colors"
+                            >
+                                {subjectNames.length === 0 ? '+ Add Your Courses' : '✏️ Manage Subjects'}
+                            </button>
                         </div>
                         
                         <div>
@@ -4450,6 +4506,10 @@
                     </form>
                 </div>
             </div>
+            {showSubjectManager && (
+                <SubjectManagerModal onClose={() => setShowSubjectManager(false)} />
+            )}
+            </>
         );
     });
 
