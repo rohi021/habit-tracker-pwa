@@ -10,7 +10,7 @@
     <title>StudentOS | Complete Student Life Management</title>
     
     <!-- PWA -->
-    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiSGFiaXRPUyIsInNob3J0X25hbWUiOiJIYWJpdE9TIiwic3RhcnRfdXJsIjoiLiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwZjE3MmEiLCJ0aGVtZV9jb2xvciI6IiM2MzY2ZjEifQ==">
+    <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
     
     <!-- Preload Critical Resources -->
@@ -40,6 +40,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     
     <style>
         /* ==================== BASE STYLES ==================== */
@@ -67,6 +68,16 @@
         body.light {
             background: #f8fafc;
             color: #0f172a;
+        }
+        
+        /* AMOLED mode */
+        body.amoled {
+            background: #000000;
+            color: #f8fafc;
+        }
+        
+        body.amoled .glass {
+            background: rgba(0, 0, 0, 0.9);
         }
         
         /* ==================== ACCESSIBILITY ==================== */
@@ -218,8 +229,8 @@
      */
     const CONFIG = Object.freeze({
         APP_NAME: 'StudentOS',
-        VERSION: '2.0.0',
-        STORAGE_KEY: 'studentos-v2', // Changed from habitos-v2 for migration
+        VERSION: '3.0.0',
+        STORAGE_KEY: 'studentos-v3',
         MAX_UNDO_STACK: 30,
         DEBOUNCE_MS: 500,
         MIN_DATA_POINTS_FOR_INSIGHTS: 7,
@@ -246,15 +257,15 @@
         MAX_LEVEL: 50,
         LEVEL_TITLES: Object.freeze({
             1: 'Freshman',
-            5: 'Student',
-            10: 'Scholar',
-            15: 'Achiever',
-            20: 'Expert',
-            25: 'Master',
-            30: 'Sage',
-            35: 'Virtuoso',
-            40: 'Legend',
-            50: 'Valedictorian'
+            6: 'Sophomore',
+            11: 'Scholar',
+            16: 'Achiever',
+            21: 'Expert',
+            26: 'Master',
+            31: 'Sage',
+            36: 'Virtuoso',
+            41: 'Legend',
+            46: 'Valedictorian'
         }),
         // Mood emojis
         MOODS: Object.freeze({
@@ -267,8 +278,179 @@
     });
 
     // ============================================================================
-    // SECTION 2: UTILITY FUNCTIONS (Pure, Testable)
+    // MOTIVATIONAL QUOTES (50+)
     // ============================================================================
+    const MOTIVATIONAL_QUOTES = [
+        "The secret of getting ahead is getting started. — Mark Twain",
+        "It always seems impossible until it's done. — Nelson Mandela",
+        "Education is the most powerful weapon. — Nelson Mandela",
+        "The only way to do great work is to love what you do. — Steve Jobs",
+        "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
+        "Believe you can and you're halfway there. — Theodore Roosevelt",
+        "The future belongs to those who believe in the beauty of their dreams. — Eleanor Roosevelt",
+        "In the middle of difficulty lies opportunity. — Albert Einstein",
+        "What we know is a drop, what we don't know is an ocean. — Isaac Newton",
+        "Learning never exhausts the mind. — Leonardo da Vinci",
+        "The mind is not a vessel to be filled, but a fire to be kindled. — Plutarch",
+        "An investment in knowledge pays the best interest. — Benjamin Franklin",
+        "The beautiful thing about learning is that nobody can take it away from you. — B.B. King",
+        "Don't let what you cannot do interfere with what you can do. — John Wooden",
+        "The expert in anything was once a beginner. — Helen Hayes",
+        "Small daily improvements over time lead to stunning results. — Robin Sharma",
+        "You don't have to be great to start, but you have to start to be great. — Zig Ziglar",
+        "Discipline is the bridge between goals and accomplishment. — Jim Rohn",
+        "The only limit to our realization of tomorrow is our doubts of today. — Franklin D. Roosevelt",
+        "Strive for progress, not perfection. — Unknown",
+        "Success is the sum of small efforts repeated day in and day out. — Robert Collier",
+        "Your limitation — it's only your imagination.",
+        "Push yourself, because no one else is going to do it for you.",
+        "Great things never come from comfort zones.",
+        "Dream it. Wish it. Do it.",
+        "Don't stop when you're tired. Stop when you're done.",
+        "Wake up with determination. Go to bed with satisfaction.",
+        "Do something today that your future self will thank you for.",
+        "Little things make big days.",
+        "It's going to be hard, but hard does not mean impossible.",
+        "Don't wait for opportunity. Create it.",
+        "The harder you work for something, the greater you'll feel when you achieve it.",
+        "Dream bigger. Do bigger.",
+        "Don't watch the clock; do what it does. Keep going. — Sam Levenson",
+        "The way to get started is to quit talking and begin doing. — Walt Disney",
+        "Knowledge is power. — Francis Bacon",
+        "Live as if you were to die tomorrow. Learn as if you were to live forever. — Mahatma Gandhi",
+        "Education is not preparation for life; education is life itself. — John Dewey",
+        "The roots of education are bitter, but the fruit is sweet. — Aristotle",
+        "Start where you are. Use what you have. Do what you can. — Arthur Ashe",
+        "A journey of a thousand miles begins with a single step. — Lao Tzu",
+        "The best time to plant a tree was 20 years ago. The second best time is now.",
+        "You are never too old to set another goal or to dream a new dream. — C.S. Lewis",
+        "Quality is not an act, it is a habit. — Aristotle",
+        "Persistence guarantees that results are inevitable. — Paramahansa Yogananda",
+        "Be the change that you wish to see in the world. — Mahatma Gandhi",
+        "Well done is better than well said. — Benjamin Franklin",
+        "It does not matter how slowly you go as long as you do not stop. — Confucius",
+        "With self-discipline most anything is possible. — Theodore Roosevelt",
+        "Action is the foundational key to all success. — Pablo Picasso",
+        "The only person you are destined to become is the person you decide to be. — Ralph Waldo Emerson",
+        "Focus on being productive instead of busy. — Tim Ferriss",
+        "Winners are not people who never fail, but people who never quit.",
+    ];
+
+    // ============================================================================
+    // ACHIEVEMENT DEFINITIONS (50+)
+    // ============================================================================
+    const ACHIEVEMENT_DEFS = [
+        { id: 'first_steps', icon: '👣', title: 'First Steps', desc: 'Complete your first habit', xp: 25 },
+        { id: 'bookworm', icon: '📖', title: 'Bookworm', desc: 'Study for 10 hours total', xp: 50 },
+        { id: 'on_fire', icon: '🔥', title: 'On Fire', desc: 'Reach a 7-day streak', xp: 50 },
+        { id: 'centurion', icon: '💯', title: 'Centurion', desc: 'Earn 100 XP', xp: 25 },
+        { id: 'marathon', icon: '🏃', title: 'Marathon', desc: '3-hour single study session', xp: 75 },
+        { id: 'planner', icon: '📋', title: 'Planner', desc: 'Add 10 assignments', xp: 50 },
+        { id: 'completionist', icon: '✅', title: 'Completionist', desc: 'Complete 10 assignments', xp: 75 },
+        { id: 'budget_master', icon: '💰', title: 'Budget Master', desc: 'Stay under budget for a full month', xp: 100 },
+        { id: 'sleep_champion', icon: '😴', title: 'Sleep Champion', desc: 'Log 7+ hours sleep for 7 days', xp: 50 },
+        { id: 'hydration_hero', icon: '💧', title: 'Hydration Hero', desc: 'Hit water goal for 7 days', xp: 50 },
+        { id: 'active_lifestyle', icon: '💪', title: 'Active Lifestyle', desc: '5 exercise sessions in a week', xp: 50 },
+        { id: 'dear_diary', icon: '📔', title: 'Dear Diary', desc: 'Write 30 journal entries', xp: 75 },
+        { id: 'night_owl', icon: '🦉', title: 'Night Owl', desc: 'Study session after 11 PM', xp: 25 },
+        { id: 'early_bird', icon: '🐦', title: 'Early Bird', desc: 'Study session before 7 AM', xp: 25 },
+        { id: 'polymath', icon: '🧠', title: 'Polymath', desc: 'Study 5+ subjects in one week', xp: 75 },
+        { id: 'perfect_week', icon: '⭐', title: 'Perfect Week', desc: 'All habits every day for 7 days', xp: 100 },
+        { id: 'semester_strong', icon: '🎓', title: 'Semester Strong', desc: 'Maintain 3.5+ GPA', xp: 75 },
+        { id: 'goal_getter', icon: '🎯', title: 'Goal Getter', desc: 'Complete 5 goals', xp: 75 },
+        { id: 'centurion_plus', icon: '🏆', title: 'Centurion Plus', desc: 'Earn 1000 XP', xp: 50 },
+        { id: 'scholar', icon: '📚', title: 'Scholar', desc: 'Reach level 20', xp: 75 },
+        { id: 'legend', icon: '🌟', title: 'Legend', desc: 'Reach level 40', xp: 100 },
+        { id: 'valedictorian', icon: '👑', title: 'Valedictorian', desc: 'Reach level 50', xp: 100 },
+        { id: 'social_butterfly', icon: '🦋', title: 'Social Butterfly', desc: 'Log social mood factor 10 times', xp: 50 },
+        { id: 'zen_master', icon: '🧘', title: 'Zen Master', desc: '7 days mindfulness habit', xp: 50 },
+        { id: 'financial_wizard', icon: '🧙', title: 'Financial Wizard', desc: '3 months under budget', xp: 100 },
+        { id: 'topic_master', icon: '📝', title: 'Topic Master', desc: 'Cover all syllabus topics for an exam', xp: 75 },
+        { id: 'streak_master', icon: '🔥', title: 'Streak Master', desc: '30-day streak on any habit', xp: 100 },
+        { id: 'century_journal', icon: '📓', title: 'Century Journal', desc: '100 journal entries', xp: 100 },
+        { id: 'fitness_freak', icon: '🏋️', title: 'Fitness Freak', desc: '30 exercise logs', xp: 75 },
+        { id: 'consistency_king', icon: '♛', title: 'Consistency King', desc: 'Complete all habits for 30 days', xp: 100 },
+        { id: 'deans_list', icon: '🎖️', title: "Dean's List", desc: 'Semester GPA 3.8+', xp: 100 },
+        { id: 'early_adopter', icon: '🚀', title: 'Early Adopter', desc: 'Use StudentOS for the first time', xp: 25 },
+        { id: 'data_driven', icon: '📊', title: 'Data Driven', desc: 'Check analytics 10 times', xp: 25 },
+        { id: 'habit_builder', icon: '🏗️', title: 'Habit Builder', desc: 'Create 5 habits', xp: 50 },
+        { id: 'time_lord', icon: '⏰', title: 'Time Lord', desc: 'Log 50 hours of study', xp: 75 },
+        { id: 'wellness_warrior', icon: '🛡️', title: 'Wellness Warrior', desc: 'Log all wellness metrics in one day', xp: 50 },
+        { id: 'budget_hawk', icon: '🦅', title: 'Budget Hawk', desc: 'Log 50 expenses', xp: 50 },
+        { id: 'grade_tracker', icon: '📈', title: 'Grade Tracker', desc: 'Log your first assessment', xp: 25 },
+        { id: 'milestone_maker', icon: '🏁', title: 'Milestone Maker', desc: 'Complete 10 milestones', xp: 50 },
+        { id: 'organized', icon: '🗂️', title: 'Organized', desc: 'Add 5 timetable entries', xp: 50 },
+        { id: 'pomodoro_pro', icon: '🍅', title: 'Pomodoro Pro', desc: 'Complete 25 Pomodoro cycles', xp: 75 },
+        { id: 'word_smith', icon: '✍️', title: 'Word Smith', desc: 'Write a 500+ word journal entry', xp: 50 },
+        { id: 'subject_master', icon: '🎯', title: 'Subject Master', desc: 'Create 5 custom subjects', xp: 25 },
+        { id: 'water_week', icon: '🌊', title: 'Water Week', desc: 'Hit water goal 7 consecutive days', xp: 50 },
+        { id: 'exam_ace', icon: '💎', title: 'Exam Ace', desc: 'Complete 5 exams', xp: 75 },
+        { id: 'self_aware', icon: '🪞', title: 'Self Aware', desc: 'Log mood for 14 consecutive days', xp: 50 },
+        { id: 'study_diverse', icon: '🌈', title: 'Study Diverse', desc: 'Study 3 subjects in one day', xp: 50 },
+        { id: 'level_10', icon: '🔟', title: 'Double Digits', desc: 'Reach level 10', xp: 50 },
+        { id: 'gratitude', icon: '🙏', title: 'Grateful Heart', desc: 'Write gratitude 7 days in a row', xp: 50 },
+        { id: 'calendar_king', icon: '📅', title: 'Calendar King', desc: 'Have events on 5 different days this week', xp: 50 },
+        { id: 'power_hour', icon: '⚡', title: 'Power Hour', desc: 'Study for 60 minutes without pausing', xp: 50 },
+        { id: 'five_k_xp', icon: '🌟', title: '5K XP', desc: 'Earn 5000 total XP', xp: 100 },
+    ];
+
+    // ============================================================================
+    // DAILY CHALLENGE POOL (50+)
+    // ============================================================================
+    const DAILY_CHALLENGE_POOL = [
+        { text: 'Study for 1 hour', type: 'study', target: 60, xp: 15 },
+        { text: 'Study for 2 hours', type: 'study', target: 120, xp: 20 },
+        { text: 'Log all meals as expenses', type: 'expense', target: 3, xp: 10 },
+        { text: 'Complete all habits today', type: 'habits_all', target: 1, xp: 20 },
+        { text: 'Write a journal entry with 200+ words', type: 'journal_words', target: 200, xp: 15 },
+        { text: 'Drink 8 glasses of water', type: 'water', target: 8, xp: 10 },
+        { text: 'Exercise for 30 minutes', type: 'exercise', target: 30, xp: 15 },
+        { text: "Study a subject you haven't touched in 3 days", type: 'study_neglected', target: 1, xp: 20 },
+        { text: 'Write 3 gratitude items', type: 'gratitude', target: 3, xp: 10 },
+        { text: 'Review upcoming deadlines', type: 'review_deadlines', target: 1, xp: 10 },
+        { text: 'Update exam preparation progress', type: 'exam_progress', target: 1, xp: 10 },
+        { text: 'Complete 3 habits', type: 'habits', target: 3, xp: 15 },
+        { text: 'Log your sleep data', type: 'sleep', target: 1, xp: 10 },
+        { text: 'Track your mood today', type: 'mood', target: 1, xp: 10 },
+        { text: 'Add a new assignment or task', type: 'assignment', target: 1, xp: 10 },
+        { text: 'Complete a Pomodoro cycle', type: 'pomodoro', target: 1, xp: 15 },
+        { text: 'Study before 9 AM', type: 'early_study', target: 1, xp: 15 },
+        { text: 'Log 3 expenses today', type: 'expense_count', target: 3, xp: 10 },
+        { text: 'Complete 5 habits', type: 'habits', target: 5, xp: 20 },
+        { text: 'Study 3 different subjects', type: 'study_variety', target: 3, xp: 20 },
+        { text: 'Write in your journal', type: 'journal', target: 1, xp: 10 },
+        { text: 'Get 7+ hours of sleep', type: 'sleep_hours', target: 7, xp: 15 },
+        { text: 'Do a 45-minute study session', type: 'study_session', target: 45, xp: 15 },
+        { text: 'Update a goal milestone', type: 'milestone', target: 1, xp: 10 },
+        { text: 'Review your weekly stats', type: 'review_stats', target: 1, xp: 10 },
+        { text: 'Complete an assignment', type: 'complete_assignment', target: 1, xp: 20 },
+        { text: 'Study for 3 hours total', type: 'study', target: 180, xp: 25 },
+        { text: 'Log exercise and sleep today', type: 'wellness_combo', target: 2, xp: 15 },
+        { text: 'Drink 6 glasses of water', type: 'water', target: 6, xp: 10 },
+        { text: 'Complete 2 Pomodoro cycles', type: 'pomodoro', target: 2, xp: 20 },
+        { text: 'Add subtasks to an assignment', type: 'subtasks', target: 1, xp: 10 },
+        { text: 'Log your mood and energy levels', type: 'mood_energy', target: 1, xp: 10 },
+        { text: 'Study a subject for 30 minutes', type: 'study_focused', target: 30, xp: 10 },
+        { text: 'Write a 100+ word journal entry', type: 'journal_words', target: 100, xp: 10 },
+        { text: 'Check your budget remaining', type: 'budget_check', target: 1, xp: 10 },
+        { text: 'Exercise for 15 minutes', type: 'exercise', target: 15, xp: 10 },
+        { text: 'Review your habit streaks', type: 'review_streaks', target: 1, xp: 10 },
+        { text: 'Study without distractions for 25 min', type: 'focus_study', target: 25, xp: 15 },
+        { text: 'Complete a habit you skipped yesterday', type: 'catch_up', target: 1, xp: 15 },
+        { text: 'Update your timetable', type: 'timetable', target: 1, xp: 10 },
+        { text: 'Add notes to a study session', type: 'study_notes', target: 1, xp: 10 },
+        { text: 'Reach your daily study goal', type: 'study_goal', target: 1, xp: 20 },
+        { text: 'Log a bedtime before 11 PM', type: 'early_sleep', target: 1, xp: 15 },
+        { text: 'Plan tomorrow by reviewing your schedule', type: 'plan', target: 1, xp: 10 },
+        { text: 'Complete all daily challenges', type: 'meta', target: 1, xp: 25 },
+        { text: 'Add a goal with milestones', type: 'goal', target: 1, xp: 15 },
+        { text: 'Study 2 subjects today', type: 'study_variety', target: 2, xp: 15 },
+        { text: 'Log your water intake consistently', type: 'water', target: 5, xp: 10 },
+        { text: 'Meditate or do mindfulness for 10 min', type: 'mindfulness', target: 10, xp: 15 },
+        { text: 'Read for 20 minutes', type: 'reading', target: 20, xp: 10 },
+        { text: 'Walk or stretch for 10 minutes', type: 'exercise', target: 10, xp: 10 },
+        { text: 'Organize your study materials', type: 'organize', target: 1, xp: 10 },
+    ];
 
     /**
      * Date utilities
@@ -1722,7 +1904,7 @@
         // ===== NEW: Study Session Tracker =====
         studySessions: [], // { id, subject, startTime, endTime, duration, notes, date, type: 'regular'|'pomodoro' }
         studyGoal: { daily: 120, weekly: 600 }, // minutes
-        subjects: ['Math', 'Science', 'English', 'History', 'Computer Science', 'Literature', 'Physics', 'Chemistry', 'Biology', 'Other'],
+        subjects: [], // User-created subject list - SINGLE SOURCE OF TRUTH
         activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime }
         
         // ===== NEW: Assignments & Exams =====
@@ -1766,6 +1948,14 @@
         achievements: [], // earned achievement IDs
         dailyChallenges: [], // { id, text, type, target, progress, completed, date, xpReward }
         
+        // ===== Grade Tracker =====
+        grades: {
+            semesters: [] // { id, name, courses: [{ id, subjectId, creditHours, assessments: [{ id, name, type, weight, score, maxScore }], gradingScale }] }
+        },
+        
+        // ===== Notifications =====
+        notifications: [], // { id, type, title, message, read, createdAt, actionLink: { tab, subTab } }
+        
         // Settings (Enhanced)
         settings: {
             theme: 'dark',
@@ -1773,9 +1963,15 @@
             hapticEnabled: true,
             reminderTime: '21:00',
             weekStartsOn: 0, // 0 = Sunday
-            // New settings
+            currency: '₹',
+            timeFormat: '12h',
+            pomodoroStudy: 25,
+            pomodoroShortBreak: 5,
+            pomodoroLongBreak: 15,
+            pomodoroCycles: 4,
             studyReminderEnabled: true,
             dailyStudyGoal: 120, // minutes
+            weeklyStudyGoal: 600,
             monthlyBudget: 5000,
             waterGoal: 8,
             sleepGoal: 8,
@@ -1788,7 +1984,9 @@
         
         // Meta
         lastSyncedAt: null,
-        appVersion: '2.0.0' // Updated for StudentOS
+        _version: '3.0.0',
+        _lastSaved: new Date().toISOString(),
+        appVersion: '3.0.0'
     });
 
     /**
@@ -1862,6 +2060,23 @@
         EARN_ACHIEVEMENT: 'EARN_ACHIEVEMENT',
         GENERATE_DAILY_CHALLENGES: 'GENERATE_DAILY_CHALLENGES',
         COMPLETE_CHALLENGE: 'COMPLETE_CHALLENGE',
+        
+        // Subjects
+        ADD_SUBJECT: 'ADD_SUBJECT',
+        UPDATE_SUBJECT: 'UPDATE_SUBJECT',
+        DELETE_SUBJECT: 'DELETE_SUBJECT',
+        
+        // Grades
+        ADD_SEMESTER: 'ADD_SEMESTER',
+        ADD_COURSE: 'ADD_COURSE',
+        ADD_ASSESSMENT: 'ADD_ASSESSMENT',
+        UPDATE_ASSESSMENT: 'UPDATE_ASSESSMENT',
+        DELETE_ASSESSMENT: 'DELETE_ASSESSMENT',
+        
+        // Notifications
+        ADD_NOTIFICATION: 'ADD_NOTIFICATION',
+        MARK_NOTIFICATION_READ: 'MARK_NOTIFICATION_READ',
+        CLEAR_NOTIFICATIONS: 'CLEAR_NOTIFICATIONS',
         
         // UI
         SET_VIEW: 'SET_VIEW',
@@ -2456,43 +2671,28 @@
                 
                 if (existingChallenges.length > 0) return state;
                 
-                // Generate 3 daily challenges
-                const challenges = [
-                    {
+                // Deterministic selection based on day-of-year
+                const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+                const poolSize = DAILY_CHALLENGE_POOL.length;
+                const selected = [];
+                for (let i = 0; i < 3; i++) {
+                    const idx = (dayOfYear * 7 + i * 13) % poolSize;
+                    const challenge = DAILY_CHALLENGE_POOL[idx];
+                    selected.push({
                         id: crypto.randomUUID(),
-                        text: 'Study for 2 hours today',
-                        type: 'study',
-                        target: 120,
+                        text: challenge.text,
+                        type: challenge.type,
+                        target: challenge.target,
                         progress: 0,
                         completed: false,
                         date: today,
-                        xpReward: 30
-                    },
-                    {
-                        id: crypto.randomUUID(),
-                        text: 'Drink 8 glasses of water',
-                        type: 'water',
-                        target: 8,
-                        progress: 0,
-                        completed: false,
-                        date: today,
-                        xpReward: 20
-                    },
-                    {
-                        id: crypto.randomUUID(),
-                        text: 'Complete 3 habits',
-                        type: 'habits',
-                        target: 3,
-                        progress: 0,
-                        completed: false,
-                        date: today,
-                        xpReward: 25
-                    }
-                ];
+                        xpReward: challenge.xp
+                    });
+                }
                 
                 return {
                     ...state,
-                    dailyChallenges: challenges
+                    dailyChallenges: selected
                 };
             }
             
@@ -2509,6 +2709,122 @@
                     ...state,
                     dailyChallenges: updatedChallenges,
                     xp: state.xp + challenge.xpReward
+                };
+            }
+            
+            // ===== SUBJECT MANAGEMENT =====
+            case ActionTypes.ADD_SUBJECT: {
+                return {
+                    ...state,
+                    subjects: [...state.subjects, payload]
+                };
+            }
+            
+            case ActionTypes.UPDATE_SUBJECT: {
+                return {
+                    ...state,
+                    subjects: state.subjects.map(s => s.id === payload.id ? { ...s, ...payload } : s)
+                };
+            }
+            
+            case ActionTypes.DELETE_SUBJECT: {
+                return {
+                    ...state,
+                    subjects: state.subjects.filter(s => s.id !== payload.id)
+                };
+            }
+            
+            // ===== GRADE TRACKER =====
+            case ActionTypes.ADD_SEMESTER: {
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: [...(state.grades?.semesters || []), payload]
+                    }
+                };
+            }
+            
+            case ActionTypes.ADD_COURSE: {
+                const { semesterId, course } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === semesterId
+                                ? { ...sem, courses: [...(sem.courses || []), course] }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.ADD_ASSESSMENT: {
+                const { semesterId: semId, courseId, assessment } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === semId
+                                ? {
+                                    ...sem,
+                                    courses: (sem.courses || []).map(c =>
+                                        c.id === courseId
+                                            ? { ...c, assessments: [...(c.assessments || []), assessment] }
+                                            : c
+                                    )
+                                }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.DELETE_ASSESSMENT: {
+                const { semesterId: dSemId, courseId: dCourseId, assessmentId } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === dSemId
+                                ? {
+                                    ...sem,
+                                    courses: (sem.courses || []).map(c =>
+                                        c.id === dCourseId
+                                            ? { ...c, assessments: (c.assessments || []).filter(a => a.id !== assessmentId) }
+                                            : c
+                                    )
+                                }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            // ===== NOTIFICATIONS =====
+            case ActionTypes.ADD_NOTIFICATION: {
+                return {
+                    ...state,
+                    notifications: [payload, ...(state.notifications || [])].slice(0, 50)
+                };
+            }
+            
+            case ActionTypes.MARK_NOTIFICATION_READ: {
+                return {
+                    ...state,
+                    notifications: (state.notifications || []).map(n =>
+                        n.id === payload.id ? { ...n, read: true } : n
+                    )
+                };
+            }
+            
+            case ActionTypes.CLEAR_NOTIFICATIONS: {
+                return {
+                    ...state,
+                    notifications: []
                 };
             }
             
@@ -2580,6 +2896,14 @@
                         achievements: state.achievements,
                         dailyChallenges: state.dailyChallenges,
                         appVersion: state.appVersion,
+                        _version: state._version || '3.0.0',
+                        _lastSaved: new Date().toISOString(),
+                        
+                        // Grades
+                        grades: state.grades,
+                        
+                        // Notifications
+                        notifications: state.notifications,
                         
                         // Cognitive Command Center extensions
                         researchLog: state.researchLog,
@@ -2606,9 +2930,35 @@
     function useLoadState(dispatch) {
         useEffect(() => {
             try {
-                const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
+                let saved = localStorage.getItem(CONFIG.STORAGE_KEY);
+                
+                // Try loading from previous version storage key for migration
+                if (!saved) {
+                    saved = localStorage.getItem('studentos-v2');
+                    if (saved) {
+                        // Migrate: save under new key and remove old
+                        localStorage.setItem(CONFIG.STORAGE_KEY, saved);
+                    }
+                }
+                
                 if (saved) {
                     const parsed = JSON.parse(saved);
+                    // Ensure new fields exist for forward migration
+                    if (!parsed.grades) parsed.grades = { semesters: [] };
+                    if (!parsed.notifications) parsed.notifications = [];
+                    if (!parsed._version) parsed._version = '3.0.0';
+                    // Migrate subjects from string array to object array (only once)
+                    if (parsed.subjects && parsed.subjects.length > 0 && typeof parsed.subjects[0] === 'string') {
+                        parsed.subjects = parsed.subjects.map((name, idx) => ({
+                            id: `subj-migrated-${idx}`,
+                            name,
+                            color: Object.keys(CONFIG.COLORS)[idx % Object.keys(CONFIG.COLORS).length],
+                            icon: '📘',
+                            weeklyGoalHours: 5
+                        }));
+                        // Re-save immediately to persist migration
+                        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({ ...parsed, _version: '3.0.0' }));
+                    }
                     dispatch({ type: ActionTypes.LOAD_STATE, payload: parsed });
                 } else {
                     dispatch({ type: ActionTypes.SET_LOADING, payload: false });
@@ -3652,10 +4002,19 @@
      */
     const StudyTimer = memo(({ onClose }) => {
         const { state, dispatch } = useApp();
-        const [selectedSubject, setSelectedSubject] = useState(state.subjects[0]);
+        const subjectNames = state.subjects.map(s => typeof s === 'string' ? s : s.name);
+        const [selectedSubject, setSelectedSubject] = useState(subjectNames[0] || '');
         const [timerMode, setTimerMode] = useState('regular'); // regular or pomodoro
         const [timeElapsed, setTimeElapsed] = useState(0);
         const [isRunning, setIsRunning] = useState(false);
+        const [showSubjectManager, setShowSubjectManager] = useState(false);
+        
+        // Update selected subject when subjects list changes (e.g. after adding a new subject)
+        useEffect(() => {
+            if (!selectedSubject && subjectNames.length > 0) {
+                setSelectedSubject(subjectNames[0]);
+            }
+        }, [subjectNames.length]);
         
         useEffect(() => {
             let interval;
@@ -3668,6 +4027,10 @@
         }, [isRunning]);
         
         const handleStart = () => {
+            if (!selectedSubject) {
+                showToast('Please add a subject first in Settings', 'error');
+                return;
+            }
             if (!state.activeStudySession) {
                 dispatch({
                     type: ActionTypes.START_STUDY_SESSION,
@@ -3695,6 +4058,7 @@
         };
         
         return (
+            <>
             <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/80 backdrop-blur-sm">
                 <div className="w-full max-w-md mx-4 bg-slate-900 rounded-2xl p-6 border border-slate-700">
                     <h3 className="text-xl font-bold text-white mb-4">Study Timer</h3>
@@ -3708,10 +4072,19 @@
                                     onChange={(e) => setSelectedSubject(e.target.value)}
                                     className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
                                 >
-                                    {state.subjects.map(subject => (
+                                    {subjectNames.length === 0 ? (
+                                        <option value="">No subjects yet — add your courses below</option>
+                                    ) : subjectNames.map(subject => (
                                         <option key={subject} value={subject}>{subject}</option>
                                     ))}
                                 </select>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSubjectManager(true)}
+                                    className="mt-2 w-full py-2 text-sm text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg border border-indigo-500/20 transition-colors"
+                                >
+                                    {subjectNames.length === 0 ? '+ Add Your Courses' : '✏️ Manage Subjects'}
+                                </button>
                             </div>
                             
                             <div className="mb-6">
@@ -3780,6 +4153,10 @@
                     </div>
                 </div>
             </div>
+            {showSubjectManager && (
+                <SubjectManagerModal onClose={() => setShowSubjectManager(false)} />
+            )}
+            </>
         );
     });
 
@@ -3787,12 +4164,23 @@
      * Assignment Form Modal
      */
     const AssignmentModal = memo(({ onClose, assignment = null, defaultType = null }) => {
-        const { dispatch } = useApp();
+        const { state, dispatch } = useApp();
+        const subjectNames = state.subjects.map(s => typeof s === 'string' ? s : s.name);
         const [title, setTitle] = useState(assignment?.title || '');
-        const [subject, setSubject] = useState(assignment?.subject || 'Math');
+        const [subject, setSubject] = useState(assignment?.subject || (subjectNames[0] || ''));
         const [dueDate, setDueDate] = useState(assignment?.dueDate || '');
         const [type, setType] = useState(assignment?.type || defaultType || 'assignment');
         const [priority, setPriority] = useState(assignment?.priority || 'medium');
+        const [progress, setProgress] = useState(assignment?.progress || 0);
+        const [description, setDescription] = useState(assignment?.description || '');
+        const [showSubjectManager, setShowSubjectManager] = useState(false);
+        
+        // Update selected subject when subjects list changes (e.g. after adding a new subject)
+        useEffect(() => {
+            if (!subject && subjectNames.length > 0) {
+                setSubject(subjectNames[0]);
+            }
+        }, [subjectNames.length]);
         
         const handleSubmit = (e) => {
             e.preventDefault();
@@ -3803,7 +4191,7 @@
                     type: ActionTypes.UPDATE_ASSIGNMENT,
                     payload: {
                         id: assignment.id,
-                        updates: { title: title.trim(), subject, dueDate, type, priority }
+                        updates: { title: title.trim(), subject, dueDate, type, priority, progress, description }
                     }
                 });
                 showToast('Assignment updated', 'success');
@@ -3816,8 +4204,11 @@
                         dueDate,
                         type,
                         priority,
+                        progress,
+                        description,
                         status: 'pending',
-                        prepProgress: 0
+                        prepProgress: 0,
+                        subtasks: []
                     }
                 });
                 showToast('Assignment added! +5 XP', 'success');
@@ -3826,6 +4217,7 @@
         };
         
         return (
+            <>
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
                     <h3 className="text-xl font-bold text-white mb-4">
@@ -3848,12 +4240,24 @@
                         <div className="grid grid-cols-2 gap-3">
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Subject</label>
-                                <input
-                                    type="text"
+                                <select
                                     value={subject}
                                     onChange={(e) => setSubject(e.target.value)}
                                     className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
-                                />
+                                >
+                                    {subjectNames.length === 0 ? (
+                                        <option value="">No subjects yet</option>
+                                    ) : subjectNames.map(s => (
+                                        <option key={s} value={s}>{s}</option>
+                                    ))}
+                                </select>
+                                <button
+                                    type="button"
+                                    onClick={() => setShowSubjectManager(true)}
+                                    className="mt-1 text-xs text-indigo-400 hover:text-indigo-300"
+                                >
+                                    {subjectNames.length === 0 ? '+ Add Courses' : '✏️ Manage'}
+                                </button>
                             </div>
                             <div>
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
@@ -3893,6 +4297,30 @@
                             </div>
                         </div>
                         
+                        {/* Description */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
+                            <textarea
+                                value={description}
+                                onChange={(e) => setDescription(e.target.value)}
+                                placeholder="Add details..."
+                                rows={2}
+                                className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white resize-none"
+                            />
+                        </div>
+                        
+                        {/* Progress Slider */}
+                        <div>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Progress: {progress}%</label>
+                            <input
+                                type="range"
+                                value={progress}
+                                onChange={(e) => setProgress(Number(e.target.value))}
+                                min="0" max="100" step="5"
+                                className="w-full accent-indigo-500"
+                            />
+                        </div>
+                        
                         <div className="flex gap-3 pt-4">
                             <button
                                 type="button"
@@ -3911,6 +4339,10 @@
                     </form>
                 </div>
             </div>
+            {showSubjectManager && (
+                <SubjectManagerModal onClose={() => setShowSubjectManager(false)} />
+            )}
+            </>
         );
     });
 
@@ -3919,12 +4351,21 @@
      */
     const TimetableModal = memo(({ onClose, entry = null }) => {
         const { state, dispatch } = useApp();
-        const [subject, setSubject] = useState(entry?.subject || (state.subjects.length > 0 ? state.subjects[0] : ''));
+        const subjectNames = state.subjects.map(s => typeof s === 'string' ? s : s.name);
+        const [subject, setSubject] = useState(entry?.subject || (subjectNames.length > 0 ? subjectNames[0] : ''));
         const [day, setDay] = useState(entry?.day || 'Monday');
         const [startTime, setStartTime] = useState(entry?.startTime || '09:00');
         const [endTime, setEndTime] = useState(entry?.endTime || '10:00');
         const [room, setRoom] = useState(entry?.room || '');
         const [notes, setNotes] = useState(entry?.notes || '');
+        const [showSubjectManager, setShowSubjectManager] = useState(false);
+        
+        // Update selected subject when subjects list changes (e.g. after adding a new subject)
+        useEffect(() => {
+            if (!subject && subjectNames.length > 0) {
+                setSubject(subjectNames[0]);
+            }
+        }, [subjectNames.length]);
         
         const days = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
         
@@ -3959,6 +4400,7 @@
         };
         
         return (
+            <>
             <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm">
                 <div className="w-full sm:max-w-md bg-slate-900 rounded-t-3xl sm:rounded-2xl p-6 border border-slate-700">
                     <h3 className="text-xl font-bold text-white mb-4">
@@ -3973,10 +4415,19 @@
                                 onChange={(e) => setSubject(e.target.value)}
                                 className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white"
                             >
-                                {state.subjects.map(s => (
+                                {subjectNames.length === 0 ? (
+                                    <option value="">No subjects yet — add your courses below</option>
+                                ) : subjectNames.map(s => (
                                     <option key={s} value={s}>{s}</option>
                                 ))}
                             </select>
+                            <button
+                                type="button"
+                                onClick={() => setShowSubjectManager(true)}
+                                className="mt-2 w-full py-2 text-sm text-indigo-400 hover:text-indigo-300 bg-indigo-500/10 hover:bg-indigo-500/20 rounded-lg border border-indigo-500/20 transition-colors"
+                            >
+                                {subjectNames.length === 0 ? '+ Add Your Courses' : '✏️ Manage Subjects'}
+                            </button>
                         </div>
                         
                         <div>
@@ -4055,6 +4506,10 @@
                     </form>
                 </div>
             </div>
+            {showSubjectManager && (
+                <SubjectManagerModal onClose={() => setShowSubjectManager(false)} />
+            )}
+            </>
         );
     });
 
@@ -4812,11 +5267,26 @@
         
         const handleExport = () => {
             const data = {
-                version: CONFIG.VERSION,
+                _version: CONFIG.VERSION,
                 exportedAt: new Date().toISOString(),
                 habits: state.habits,
                 habitOrder: state.habitOrder,
                 settings: state.settings,
+                subjects: state.subjects,
+                studySessions: state.studySessions,
+                assignments: state.assignments,
+                timetable: state.timetable,
+                expenses: state.expenses,
+                sleepLog: state.sleepLog,
+                waterLog: state.waterLog,
+                exerciseLog: state.exerciseLog,
+                moodLog: state.moodLog,
+                journalEntries: state.journalEntries,
+                goals: state.goals,
+                grades: state.grades,
+                xp: state.xp,
+                level: state.level,
+                achievements: state.achievements,
                 streakFreezes: state.streakFreezes,
                 totalPoints: state.totalPoints
             };
@@ -4825,7 +5295,7 @@
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
-            a.download = `habitos-backup-${DateUtils.toKey()}.json`;
+            a.download = `studentos-backup-${DateUtils.toKey()}.json`;
             a.click();
             URL.revokeObjectURL(url);
             showToast('Data exported', 'success');
@@ -4897,33 +5367,66 @@
                 <div className="space-y-3">
                     <h3 className="text-sm font-semibold text-slate-300">Quick Access</h3>
                     
-                    <button
-                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'expenses' })}
-                        className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
-                    >
-                        <div className="flex items-center gap-3">
-                            <span className="text-xl">💰</span>
-                            <div className="text-left">
-                                <div className="font-medium text-white">Expense Tracker</div>
-                                <div className="text-xs text-slate-400">Manage your budget</div>
+                    {[
+                        { view: 'expenses', icon: '💰', title: 'Expense Tracker', desc: 'Manage your budget' },
+                        { view: 'matrix', icon: '📊', title: 'Eisenhower Matrix', desc: 'Priority quadrants' },
+                        { view: 'grades', icon: '📈', title: 'Grade Tracker', desc: 'Track your GPA' },
+                        { view: 'goals', icon: '🎯', title: 'Goal System', desc: 'Track goals and milestones' },
+                        { view: 'calendar', icon: '📅', title: 'Calendar', desc: 'View all events' },
+                    ].map(item => (
+                        <button key={item.view}
+                            onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: item.view })}
+                            className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
+                        >
+                            <div className="flex items-center gap-3">
+                                <span className="text-xl">{item.icon}</span>
+                                <div className="text-left">
+                                    <div className="font-medium text-white">{item.title}</div>
+                                    <div className="text-xs text-slate-400">{item.desc}</div>
+                                </div>
                             </div>
-                        </div>
-                        <span className="text-slate-400">→</span>
-                    </button>
-                    
-                    <button
-                        onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: 'matrix' })}
-                        className="w-full flex items-center justify-between p-4 bg-slate-800/50 rounded-xl border border-slate-700 hover:bg-slate-800 transition-colors"
-                    >
-                        <div className="flex items-center gap-3">
-                            <span className="text-xl">📊</span>
-                            <div className="text-left">
-                                <div className="font-medium text-white">Eisenhower Matrix</div>
-                                <div className="text-xs text-slate-400">Priority quadrants</div>
-                            </div>
-                        </div>
-                        <span className="text-slate-400">→</span>
-                    </button>
+                            <span className="text-slate-400">→</span>
+                        </button>
+                    ))}
+                </div>
+                
+                {/* Theme */}
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-300">Theme</h3>
+                    <div className="flex gap-2">
+                        {['dark', 'light', 'amoled'].map(theme => (
+                            <button key={theme}
+                                onClick={() => {
+                                    dispatch({ type: ActionTypes.UPDATE_SETTINGS, payload: { theme } });
+                                    document.body.className = theme === 'dark' ? '' : theme;
+                                }}
+                                className={`flex-1 py-2 rounded-xl text-sm font-medium capitalize ${
+                                    state.settings.theme === theme
+                                        ? 'bg-indigo-500 text-white'
+                                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                                }`}>
+                                {theme === 'amoled' ? 'AMOLED' : theme}
+                            </button>
+                        ))}
+                    </div>
+                </div>
+                
+                {/* Currency */}
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-300">Currency</h3>
+                    <div className="flex gap-2 flex-wrap">
+                        {['₹', '$', '€', '£', '¥'].map(c => (
+                            <button key={c}
+                                onClick={() => dispatch({ type: ActionTypes.UPDATE_SETTINGS, payload: { currency: c } })}
+                                className={`px-4 py-2 rounded-xl text-sm font-medium ${
+                                    state.settings.currency === c
+                                        ? 'bg-indigo-500 text-white'
+                                        : 'bg-slate-800 text-slate-400 hover:text-white'
+                                }`}>
+                                {c}
+                            </button>
+                        ))}
+                    </div>
                 </div>
                 
                 {/* Data Management */}
@@ -5108,6 +5611,13 @@
         
         return (
             <>
+                {/* Motivational Quote */}
+                <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl p-4 border border-indigo-500/20 mb-6">
+                    <p className="text-sm text-slate-300 italic">
+                        "{MOTIVATIONAL_QUOTES[new Date().getDate() + new Date().getMonth() * 31 % MOTIVATIONAL_QUOTES.length]}"
+                    </p>
+                </div>
+                
                 <StatsOverview />
                 
                 {/* Quick Access Widgets */}
@@ -6786,6 +7296,755 @@
     });
 
     // ============================================================================
+    // SECTION 8B: SUBJECT MANAGER MODAL
+    // ============================================================================
+    
+    const SubjectManagerModal = memo(({ onClose }) => {
+        const { state, dispatch } = useApp();
+        const [name, setName] = useState('');
+        const [color, setColor] = useState('indigo');
+        const [icon, setIcon] = useState('📘');
+        const [weeklyGoalHours, setWeeklyGoalHours] = useState(5);
+        const [editingId, setEditingId] = useState(null);
+        
+        const colors = Object.keys(CONFIG.COLORS);
+        const icons = ['📘', '📗', '📕', '📙', '📓', '🔬', '🧮', '🎨', '🌍', '💻', '📐', '🎵', '⚗️', '📊', '🏛️', '✏️'];
+        
+        const handleSave = () => {
+            if (!name.trim()) return;
+            if (editingId) {
+                dispatch({ type: ActionTypes.UPDATE_SUBJECT, payload: { id: editingId, name: name.trim(), color, icon, weeklyGoalHours } });
+            } else {
+                dispatch({ type: ActionTypes.ADD_SUBJECT, payload: { id: crypto.randomUUID(), name: name.trim(), color, icon, weeklyGoalHours } });
+            }
+            setName(''); setColor('indigo'); setIcon('📘'); setWeeklyGoalHours(5); setEditingId(null);
+            showToast(editingId ? 'Subject updated' : 'Subject added', 'success');
+        };
+        
+        const handleEdit = (subject) => {
+            setName(subject.name);
+            setColor(subject.color || 'indigo');
+            setIcon(subject.icon || '📘');
+            setWeeklyGoalHours(subject.weeklyGoalHours || 5);
+            setEditingId(subject.id);
+        };
+        
+        const handleDelete = (id) => {
+            if (confirm('Delete this subject? It may affect linked assignments and exams.')) {
+                dispatch({ type: ActionTypes.DELETE_SUBJECT, payload: { id } });
+                showToast('Subject deleted');
+            }
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex items-end justify-center bg-black/60" onClick={onClose} role="dialog" aria-modal="true" aria-label="Manage Subjects">
+                <div className="w-full max-w-lg bg-slate-900 rounded-t-2xl p-6 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                    <div className="flex items-center justify-between mb-4">
+                        <h3 className="text-lg font-bold text-white">Manage Subjects</h3>
+                        <button onClick={onClose} className="text-slate-400 hover:text-white text-xl" aria-label="Close">✕</button>
+                    </div>
+                    
+                    {/* Add/Edit Form */}
+                    <div className="space-y-3 mb-4 p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                        <input
+                            type="text" value={name} onChange={e => setName(e.target.value)}
+                            placeholder="Subject name" maxLength={50}
+                            className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm"
+                        />
+                        <div className="flex gap-2 flex-wrap">
+                            {icons.map(ic => (
+                                <button key={ic} onClick={() => setIcon(ic)}
+                                    className={`text-xl p-1 rounded ${icon === ic ? 'bg-indigo-500' : 'bg-slate-700'}`}>{ic}</button>
+                            ))}
+                        </div>
+                        <div className="flex gap-2 flex-wrap">
+                            {colors.map(c => (
+                                <button key={c} onClick={() => setColor(c)}
+                                    className={`w-6 h-6 rounded-full border-2 ${color === c ? 'border-white' : 'border-transparent'}`}
+                                    style={{ backgroundColor: CONFIG.COLORS[c]?.bg }} aria-label={c} />
+                            ))}
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <label className="text-sm text-slate-400">Weekly Goal (hrs):</label>
+                            <input type="number" value={weeklyGoalHours} onChange={e => setWeeklyGoalHours(Math.max(0, Number(e.target.value)))}
+                                min="0" max="100" className="w-16 px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-sm" />
+                        </div>
+                        <button onClick={handleSave} className="w-full py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg font-medium text-sm">
+                            {editingId ? 'Update Subject' : 'Add Subject'}
+                        </button>
+                    </div>
+                    
+                    {/* Subject List */}
+                    {state.subjects.length === 0 ? (
+                        <div className="text-center py-6 text-slate-400">
+                            <div className="text-3xl mb-2">📚</div>
+                            <p className="text-sm">No subjects yet. Add your first subject above!</p>
+                        </div>
+                    ) : (
+                        <div className="space-y-2">
+                            {state.subjects.map(subject => (
+                                <div key={subject.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-xl border border-slate-700">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">{subject.icon || '📘'}</span>
+                                        <span className="font-medium text-white text-sm">{subject.name}</span>
+                                        <div className="w-3 h-3 rounded-full" style={{ backgroundColor: CONFIG.COLORS[subject.color]?.bg || '#6366f1' }} />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleEdit(subject)} className="text-slate-400 hover:text-white text-sm" aria-label="Edit">✏️</button>
+                                        <button onClick={() => handleDelete(subject.id)} className="text-slate-400 hover:text-rose-400 text-sm" aria-label="Delete">🗑️</button>
+                                    </div>
+                                </div>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    });
+
+    // ============================================================================
+    // SECTION 8C: GRADE TRACKER VIEW
+    // ============================================================================
+    
+    const GradeTrackerView = memo(() => {
+        const { state, dispatch } = useApp();
+        const [showAddSemester, setShowAddSemester] = useState(false);
+        const [showAddCourse, setShowAddCourse] = useState(null);
+        const [showAddAssessment, setShowAddAssessment] = useState(null);
+        const [semesterName, setSemesterName] = useState('');
+        const [courseName, setCourseName] = useState('');
+        const [courseCredits, setCourseCredits] = useState(3);
+        const [assessmentData, setAssessmentData] = useState({ name: '', type: 'Assignment', weight: 10, score: 0, maxScore: 100 });
+        
+        const semesters = state.grades?.semesters || [];
+        
+        const calcCourseGPA = (course) => {
+            const assessments = course.assessments || [];
+            if (assessments.length === 0) return null;
+            const totalWeight = assessments.reduce((s, a) => s + a.weight, 0);
+            if (totalWeight === 0) return null;
+            const weightedScore = assessments.reduce((s, a) => s + (a.score / a.maxScore) * a.weight, 0);
+            const pct = (weightedScore / totalWeight) * 100;
+            if (pct >= 93) return 4.0;
+            if (pct >= 90) return 3.7;
+            if (pct >= 87) return 3.3;
+            if (pct >= 83) return 3.0;
+            if (pct >= 80) return 2.7;
+            if (pct >= 77) return 2.3;
+            if (pct >= 73) return 2.0;
+            if (pct >= 70) return 1.7;
+            if (pct >= 67) return 1.3;
+            if (pct >= 60) return 1.0;
+            return 0.0;
+        };
+        
+        const calcSemesterGPA = (semester) => {
+            const courses = semester.courses || [];
+            let totalCredits = 0, totalPoints = 0;
+            courses.forEach(c => {
+                const gpa = calcCourseGPA(c);
+                if (gpa !== null) {
+                    totalCredits += c.creditHours || 3;
+                    totalPoints += gpa * (c.creditHours || 3);
+                }
+            });
+            return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 'N/A';
+        };
+        
+        const calcCGPA = () => {
+            let totalCredits = 0, totalPoints = 0;
+            semesters.forEach(sem => {
+                (sem.courses || []).forEach(c => {
+                    const gpa = calcCourseGPA(c);
+                    if (gpa !== null) {
+                        totalCredits += c.creditHours || 3;
+                        totalPoints += gpa * (c.creditHours || 3);
+                    }
+                });
+            });
+            return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 'N/A';
+        };
+        
+        const handleAddSemester = () => {
+            if (!semesterName.trim()) return;
+            dispatch({ type: ActionTypes.ADD_SEMESTER, payload: { id: crypto.randomUUID(), name: semesterName.trim(), courses: [] } });
+            setSemesterName(''); setShowAddSemester(false);
+            showToast('Semester added', 'success');
+        };
+        
+        const handleAddCourse = (semId) => {
+            if (!courseName.trim()) return;
+            dispatch({ type: ActionTypes.ADD_COURSE, payload: { semesterId: semId, course: { id: crypto.randomUUID(), name: courseName.trim(), creditHours: courseCredits, assessments: [] } } });
+            setCourseName(''); setCourseCredits(3); setShowAddCourse(null);
+            showToast('Course added', 'success');
+        };
+        
+        const handleAddAssessment = (semId, courseId) => {
+            if (!assessmentData.name.trim()) return;
+            dispatch({
+                type: ActionTypes.ADD_ASSESSMENT,
+                payload: { semesterId: semId, courseId, assessment: { id: crypto.randomUUID(), ...assessmentData } }
+            });
+            dispatch({ type: ActionTypes.ADD_XP, payload: { amount: 5 } });
+            setAssessmentData({ name: '', type: 'Assignment', weight: 10, score: 0, maxScore: 100 });
+            setShowAddAssessment(null);
+            showToast('Assessment logged +5 XP', 'success');
+        };
+        
+        return (
+            <div className="space-y-6">
+                <div className="flex items-center justify-between">
+                    <div>
+                        <h2 className="text-2xl font-bold text-white mb-1">📈 Grade Tracker</h2>
+                        <p className="text-slate-400 text-sm">Track your courses, assessments, and GPA</p>
+                    </div>
+                    <div className="text-right">
+                        <div className="text-xs text-slate-400">CGPA</div>
+                        <div className="text-2xl font-bold text-indigo-400">{calcCGPA()}</div>
+                    </div>
+                </div>
+                
+                <button onClick={() => setShowAddSemester(true)} className="w-full py-3 bg-indigo-500/20 border border-indigo-500/30 rounded-xl text-indigo-400 font-medium hover:bg-indigo-500/30 transition-colors">
+                    + Add Semester
+                </button>
+                
+                {showAddSemester && (
+                    <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
+                        <input type="text" value={semesterName} onChange={e => setSemesterName(e.target.value)} placeholder="Semester name (e.g., Fall 2026)"
+                            className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                        <div className="flex gap-2">
+                            <button onClick={handleAddSemester} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Add</button>
+                            <button onClick={() => setShowAddSemester(false)} className="flex-1 py-2 bg-slate-700 rounded-lg text-slate-300 text-sm">Cancel</button>
+                        </div>
+                    </div>
+                )}
+                
+                {semesters.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400">
+                        <div className="text-4xl mb-3">🎓</div>
+                        <p className="font-medium text-white mb-1">No semesters yet</p>
+                        <p className="text-sm">Add a semester to start tracking your grades</p>
+                    </div>
+                ) : (
+                    semesters.map(sem => (
+                        <div key={sem.id} className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
+                            <div className="flex items-center justify-between">
+                                <h3 className="font-bold text-white">{sem.name}</h3>
+                                <span className="text-sm text-indigo-400 font-medium">GPA: {calcSemesterGPA(sem)}</span>
+                            </div>
+                            
+                            {(sem.courses || []).map(course => {
+                                const gpa = calcCourseGPA(course);
+                                return (
+                                    <div key={course.id} className="bg-slate-900/50 rounded-lg p-3 space-y-2">
+                                        <div className="flex items-center justify-between">
+                                            <div>
+                                                <span className="font-medium text-white text-sm">{course.name}</span>
+                                                <span className="ml-2 text-xs text-slate-400">{course.creditHours} credits</span>
+                                            </div>
+                                            <span className="text-sm font-medium text-emerald-400">{gpa !== null ? gpa.toFixed(1) : '-'}</span>
+                                        </div>
+                                        
+                                        {(course.assessments || []).map(a => (
+                                            <div key={a.id} className="flex items-center justify-between text-xs text-slate-400 pl-2">
+                                                <span>{a.name} ({a.type}, {a.weight}%)</span>
+                                                <div className="flex items-center gap-2">
+                                                    <span className="text-white">{a.score}/{a.maxScore}</span>
+                                                    <button onClick={() => {
+                                                        if (confirm('Delete this assessment?')) {
+                                                            dispatch({ type: ActionTypes.DELETE_ASSESSMENT, payload: { semesterId: sem.id, courseId: course.id, assessmentId: a.id } });
+                                                        }
+                                                    }} className="text-rose-400 hover:text-rose-300" aria-label="Delete assessment">✕</button>
+                                                </div>
+                                            </div>
+                                        ))}
+                                        
+                                        {showAddAssessment === course.id ? (
+                                            <div className="space-y-2 p-2 bg-slate-800 rounded-lg">
+                                                <input type="text" value={assessmentData.name} onChange={e => setAssessmentData(p => ({...p, name: e.target.value}))}
+                                                    placeholder="Assessment name" className="w-full px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
+                                                <div className="flex gap-2">
+                                                    <select value={assessmentData.type} onChange={e => setAssessmentData(p => ({...p, type: e.target.value}))}
+                                                        className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600">
+                                                        {['Quiz','Assignment','Midterm','Final','Project','Lab','Participation'].map(t => <option key={t} value={t}>{t}</option>)}
+                                                    </select>
+                                                    <input type="number" value={assessmentData.weight} onChange={e => setAssessmentData(p => ({...p, weight: Math.max(0, Math.min(100, Number(e.target.value)))}))}
+                                                        placeholder="Weight %" min="0" max="100" className="w-16 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <input type="number" value={assessmentData.score} onChange={e => setAssessmentData(p => ({...p, score: Math.max(0, Number(e.target.value))}))}
+                                                        placeholder="Score" min="0" className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
+                                                    <span className="text-slate-400 text-xs self-center">/</span>
+                                                    <input type="number" value={assessmentData.maxScore} onChange={e => setAssessmentData(p => ({...p, maxScore: Math.max(1, Number(e.target.value))}))}
+                                                        placeholder="Max" min="1" className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
+                                                </div>
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => handleAddAssessment(sem.id, course.id)} className="flex-1 py-1 bg-indigo-500 rounded text-white text-xs">Add</button>
+                                                    <button onClick={() => setShowAddAssessment(null)} className="flex-1 py-1 bg-slate-700 rounded text-slate-300 text-xs">Cancel</button>
+                                                </div>
+                                            </div>
+                                        ) : (
+                                            <button onClick={() => setShowAddAssessment(course.id)} className="w-full py-1 text-indigo-400 text-xs hover:bg-indigo-500/10 rounded">
+                                                + Add Assessment
+                                            </button>
+                                        )}
+                                    </div>
+                                );
+                            })}
+                            
+                            {showAddCourse === sem.id ? (
+                                <div className="space-y-2 p-3 bg-slate-900/50 rounded-lg">
+                                    <input type="text" value={courseName} onChange={e => setCourseName(e.target.value)} placeholder="Course name"
+                                        className="w-full px-2 py-1 bg-slate-800 rounded text-white text-sm border border-slate-600" />
+                                    <div className="flex items-center gap-2">
+                                        <label className="text-xs text-slate-400">Credits:</label>
+                                        <input type="number" value={courseCredits} onChange={e => setCourseCredits(Math.max(1, Math.min(10, Number(e.target.value))))}
+                                            min="1" max="10" className="w-16 px-2 py-1 bg-slate-800 rounded text-white text-xs border border-slate-600" />
+                                    </div>
+                                    <div className="flex gap-2">
+                                        <button onClick={() => handleAddCourse(sem.id)} className="flex-1 py-1 bg-indigo-500 rounded text-white text-sm">Add Course</button>
+                                        <button onClick={() => setShowAddCourse(null)} className="flex-1 py-1 bg-slate-700 rounded text-slate-300 text-sm">Cancel</button>
+                                    </div>
+                                </div>
+                            ) : (
+                                <button onClick={() => setShowAddCourse(sem.id)} className="w-full py-2 text-indigo-400 text-sm hover:bg-indigo-500/10 rounded-lg border border-dashed border-slate-700">
+                                    + Add Course
+                                </button>
+                            )}
+                        </div>
+                    ))
+                )}
+            </div>
+        );
+    });
+
+    // ============================================================================
+    // SECTION 8D: CALENDAR VIEW
+    // ============================================================================
+    
+    const CalendarView = memo(() => {
+        const { state } = useApp();
+        const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
+        const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
+        const [selectedDay, setSelectedDay] = useState(null);
+        
+        const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
+        const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
+        
+        const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
+        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        
+        const today = DateUtils.toKey();
+        
+        // Gather all events for this month
+        const getEventsForDay = (dateKey) => {
+            const events = [];
+            // Assignments
+            (state.assignments || []).forEach(a => {
+                if (a.dueDate && a.dueDate.startsWith(dateKey)) {
+                    events.push({ type: 'assignment', title: a.title, color: 'bg-blue-500' });
+                }
+            });
+            // Exams
+            (state.assignments || []).filter(a => a.type === 'exam').forEach(a => {
+                if (a.dueDate && a.dueDate.startsWith(dateKey)) {
+                    events.push({ type: 'exam', title: a.title, color: 'bg-rose-500' });
+                }
+            });
+            // Timetable (check day of week)
+            const dayOfWeek = new Date(dateKey).getDay();
+            const dayMap = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+            (state.timetable || []).forEach(t => {
+                if ((t.days || [t.day]).includes(dayMap[dayOfWeek])) {
+                    events.push({ type: 'class', title: t.subject, color: 'bg-emerald-500' });
+                }
+            });
+            // Goals
+            (state.goals || []).forEach(g => {
+                if (g.targetDate && g.targetDate.startsWith(dateKey)) {
+                    events.push({ type: 'goal', title: g.title, color: 'bg-purple-500' });
+                }
+            });
+            // Journal
+            if ((state.journalEntries || []).some(j => j.date === dateKey)) {
+                events.push({ type: 'journal', title: 'Journal Entry', color: 'bg-slate-400' });
+            }
+            return events;
+        };
+        
+        const daysInMonth = getDaysInMonth(currentYear, currentMonth);
+        const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
+        
+        const prevMonth = () => {
+            if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); }
+            else setCurrentMonth(currentMonth - 1);
+            setSelectedDay(null);
+        };
+        
+        const nextMonth = () => {
+            if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(currentYear + 1); }
+            else setCurrentMonth(currentMonth + 1);
+            setSelectedDay(null);
+        };
+        
+        const calendarDays = [];
+        for (let i = 0; i < firstDay; i++) calendarDays.push(null);
+        for (let d = 1; d <= daysInMonth; d++) calendarDays.push(d);
+        
+        const selectedDateKey = selectedDay 
+            ? `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`
+            : null;
+        const selectedEvents = selectedDateKey ? getEventsForDay(selectedDateKey) : [];
+        
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-1">📅 Calendar</h2>
+                    <p className="text-slate-400 text-sm">View all your events in one place</p>
+                </div>
+                
+                {/* Month Navigation */}
+                <div className="flex items-center justify-between bg-slate-800/50 rounded-xl p-3 border border-slate-700">
+                    <button onClick={prevMonth} className="px-3 py-1 text-slate-400 hover:text-white" aria-label="Previous month">◀</button>
+                    <span className="font-bold text-white">{monthNames[currentMonth]} {currentYear}</span>
+                    <button onClick={nextMonth} className="px-3 py-1 text-slate-400 hover:text-white" aria-label="Next month">▶</button>
+                </div>
+                
+                {/* Calendar Grid */}
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-3">
+                    <div className="grid grid-cols-7 gap-1 mb-2">
+                        {dayNames.map(d => (
+                            <div key={d} className="text-center text-xs text-slate-400 font-medium py-1">{d}</div>
+                        ))}
+                    </div>
+                    <div className="grid grid-cols-7 gap-1">
+                        {calendarDays.map((day, idx) => {
+                            if (!day) return <div key={`empty-${idx}`} />;
+                            const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                            const events = getEventsForDay(dateKey);
+                            const isToday = dateKey === today;
+                            const isSelected = day === selectedDay;
+                            
+                            return (
+                                <button key={day} onClick={() => setSelectedDay(day === selectedDay ? null : day)}
+                                    className={`relative p-2 rounded-lg text-center text-sm transition-all ${
+                                        isSelected ? 'bg-indigo-500 text-white' :
+                                        isToday ? 'bg-indigo-500/20 text-indigo-400 font-bold' :
+                                        'text-slate-300 hover:bg-slate-700'
+                                    }`}>
+                                    {day}
+                                    {events.length > 0 && (
+                                        <div className="flex gap-0.5 justify-center mt-0.5">
+                                            {events.slice(0, 3).map((e, i) => (
+                                                <div key={i} className={`w-1 h-1 rounded-full ${e.color}`} />
+                                            ))}
+                                        </div>
+                                    )}
+                                </button>
+                            );
+                        })}
+                    </div>
+                </div>
+                
+                {/* Legend */}
+                <div className="flex flex-wrap gap-3 text-xs text-slate-400">
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" /> Assignment</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-500" /> Exam</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Class</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500" /> Goal</span>
+                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-400" /> Journal</span>
+                </div>
+                
+                {/* Selected Day Events */}
+                {selectedDay && (
+                    <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4">
+                        <h3 className="font-bold text-white mb-3">{monthNames[currentMonth]} {selectedDay}, {currentYear}</h3>
+                        {selectedEvents.length === 0 ? (
+                            <p className="text-slate-400 text-sm">No events on this day</p>
+                        ) : (
+                            <div className="space-y-2">
+                                {selectedEvents.map((event, idx) => (
+                                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-lg">
+                                        <div className={`w-2 h-2 rounded-full ${event.color}`} />
+                                        <span className="text-sm text-white">{event.title}</span>
+                                        <span className="text-xs text-slate-400 capitalize">({event.type})</span>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                )}
+            </div>
+        );
+    });
+
+    // ============================================================================
+    // SECTION 8E: GOAL VIEW
+    // ============================================================================
+    
+    const GoalView = memo(() => {
+        const { state, dispatch } = useApp();
+        const [showAdd, setShowAdd] = useState(false);
+        const [goalForm, setGoalForm] = useState({ title: '', description: '', category: 'Academic', deadline: '', milestones: [] });
+        const [milestoneText, setMilestoneText] = useState('');
+        
+        const goals = state.goals || [];
+        const activeGoals = goals.filter(g => g.status !== 'completed');
+        const completedGoals = goals.filter(g => g.status === 'completed');
+        
+        const handleAddGoal = () => {
+            if (!goalForm.title.trim()) return;
+            const newGoal = {
+                id: crypto.randomUUID(),
+                ...goalForm,
+                milestones: goalForm.milestones.map(m => ({ id: crypto.randomUUID(), text: m, completed: false })),
+                progress: 0,
+                status: 'active',
+                linkedHabits: [],
+                createdAt: new Date().toISOString()
+            };
+            dispatch({ type: ActionTypes.ADD_GOAL, payload: newGoal });
+            dispatch({ type: ActionTypes.ADD_XP, payload: { amount: 10 } });
+            setGoalForm({ title: '', description: '', category: 'Academic', deadline: '', milestones: [] });
+            setShowAdd(false);
+            showToast('Goal added +10 XP', 'success');
+        };
+        
+        const handleToggleMilestone = (goalId, milestoneId) => {
+            dispatch({ type: ActionTypes.TOGGLE_MILESTONE, payload: { goalId, milestoneId } });
+            dispatch({ type: ActionTypes.ADD_XP, payload: { amount: 10 } });
+            showToast('Milestone updated +10 XP', 'success');
+        };
+        
+        const handleCompleteGoal = (goalId) => {
+            dispatch({ type: ActionTypes.UPDATE_GOAL, payload: { id: goalId, status: 'completed', completedAt: new Date().toISOString() } });
+            dispatch({ type: ActionTypes.ADD_XP, payload: { amount: 50 } });
+            if (typeof confetti === 'function') confetti({ particleCount: 100, spread: 70 });
+            showToast('Goal completed! +50 XP 🎉', 'success');
+        };
+        
+        const handleDeleteGoal = (goalId) => {
+            if (confirm('Delete this goal?')) {
+                dispatch({ type: ActionTypes.DELETE_GOAL, payload: goalId });
+                showToast('Goal deleted');
+            }
+        };
+        
+        const getGoalProgress = (goal) => {
+            const milestones = goal.milestones || [];
+            if (milestones.length === 0) return goal.progress || 0;
+            const done = milestones.filter(m => m.completed || m.done).length;
+            return Math.round((done / milestones.length) * 100);
+        };
+        
+        return (
+            <div className="space-y-6">
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-1">🎯 Goals</h2>
+                    <p className="text-slate-400 text-sm">Set goals with milestones and track your progress</p>
+                </div>
+                
+                <button onClick={() => setShowAdd(true)} className="w-full py-3 bg-indigo-500/20 border border-indigo-500/30 rounded-xl text-indigo-400 font-medium hover:bg-indigo-500/30 transition-colors">
+                    + Add Goal
+                </button>
+                
+                {showAdd && (
+                    <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
+                        <input type="text" value={goalForm.title} onChange={e => setGoalForm(p => ({...p, title: e.target.value}))}
+                            placeholder="Goal title" className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                        <textarea value={goalForm.description} onChange={e => setGoalForm(p => ({...p, description: e.target.value}))}
+                            placeholder="Description" rows={2} className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm resize-none" />
+                        <div className="flex gap-2">
+                            <select value={goalForm.category} onChange={e => setGoalForm(p => ({...p, category: e.target.value}))}
+                                className="flex-1 px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm">
+                                {['Academic','Personal','Health','Financial','Career'].map(c => <option key={c} value={c}>{c}</option>)}
+                            </select>
+                            <input type="date" value={goalForm.deadline} onChange={e => setGoalForm(p => ({...p, deadline: e.target.value}))}
+                                className="flex-1 px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                        </div>
+                        
+                        {/* Milestones */}
+                        <div className="space-y-2">
+                            <label className="text-sm text-slate-400">Milestones:</label>
+                            {goalForm.milestones.map((m, i) => (
+                                <div key={i} className="flex items-center gap-2">
+                                    <span className="text-sm text-white flex-1">{m}</span>
+                                    <button onClick={() => setGoalForm(p => ({...p, milestones: p.milestones.filter((_, idx) => idx !== i)}))}
+                                        className="text-rose-400 text-xs" aria-label="Remove milestone">✕</button>
+                                </div>
+                            ))}
+                            <div className="flex gap-2">
+                                <input type="text" value={milestoneText} onChange={e => setMilestoneText(e.target.value)}
+                                    placeholder="Add milestone" className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600"
+                                    onKeyDown={e => { if (e.key === 'Enter' && milestoneText.trim()) { setGoalForm(p => ({...p, milestones: [...p.milestones, milestoneText.trim()]})); setMilestoneText(''); }}} />
+                                <button onClick={() => { if (milestoneText.trim()) { setGoalForm(p => ({...p, milestones: [...p.milestones, milestoneText.trim()]})); setMilestoneText(''); }}}
+                                    className="px-3 py-1 bg-slate-700 rounded text-slate-300 text-xs">Add</button>
+                            </div>
+                        </div>
+                        
+                        <div className="flex gap-2">
+                            <button onClick={handleAddGoal} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Create Goal</button>
+                            <button onClick={() => setShowAdd(false)} className="flex-1 py-2 bg-slate-700 rounded-lg text-slate-300 text-sm">Cancel</button>
+                        </div>
+                    </div>
+                )}
+                
+                {/* Active Goals */}
+                {activeGoals.length === 0 && completedGoals.length === 0 ? (
+                    <div className="text-center py-12 text-slate-400">
+                        <div className="text-4xl mb-3">🎯</div>
+                        <p className="font-medium text-white mb-1">No goals yet</p>
+                        <p className="text-sm">Set your first goal and start making progress!</p>
+                    </div>
+                ) : (
+                    <>
+                        {activeGoals.map(goal => {
+                            const progress = getGoalProgress(goal);
+                            const daysLeft = goal.deadline ? Math.ceil((new Date(goal.deadline) - new Date()) / (1000 * 60 * 60 * 24)) : null;
+                            return (
+                                <div key={goal.id} className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <div>
+                                            <h3 className="font-bold text-white">{goal.title}</h3>
+                                            <span className="text-xs text-slate-400">{goal.category}</span>
+                                        </div>
+                                        <div className="flex gap-2">
+                                            {progress === 100 && (
+                                                <button onClick={() => handleCompleteGoal(goal.id)} className="px-2 py-1 bg-emerald-500/20 text-emerald-400 text-xs rounded font-medium">
+                                                    Complete ✓
+                                                </button>
+                                            )}
+                                            <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-400 hover:text-rose-400 text-sm" aria-label="Delete goal">🗑️</button>
+                                        </div>
+                                    </div>
+                                    
+                                    {goal.description && <p className="text-sm text-slate-400">{goal.description}</p>}
+                                    
+                                    {/* Progress Bar */}
+                                    <div className="space-y-1">
+                                        <div className="flex justify-between text-xs text-slate-400">
+                                            <span>Progress</span>
+                                            <span>{progress}%</span>
+                                        </div>
+                                        <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                            <div className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 transition-all duration-500 rounded-full" style={{ width: `${progress}%` }} />
+                                        </div>
+                                    </div>
+                                    
+                                    {daysLeft !== null && (
+                                        <span className={`text-xs ${daysLeft < 0 ? 'text-rose-400' : daysLeft <= 3 ? 'text-amber-400' : 'text-emerald-400'}`}>
+                                            {daysLeft < 0 ? `${Math.abs(daysLeft)} days overdue` : `${daysLeft} days remaining`}
+                                        </span>
+                                    )}
+                                    
+                                    {/* Milestones */}
+                                    {(goal.milestones || []).length > 0 && (
+                                        <div className="space-y-1">
+                                            {goal.milestones.map(m => (
+                                                <button key={m.id} onClick={() => handleToggleMilestone(goal.id, m.id)}
+                                                    className="w-full flex items-center gap-2 p-2 bg-slate-900/50 rounded-lg hover:bg-slate-900 transition-colors text-left">
+                                                    <span className={`text-sm ${m.completed || m.done ? 'text-emerald-400' : 'text-slate-500'}`}>
+                                                        {m.completed || m.done ? '✅' : '⬜'}
+                                                    </span>
+                                                    <span className={`text-sm ${m.completed || m.done ? 'text-slate-400 line-through' : 'text-white'}`}>{m.text}</span>
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            );
+                        })}
+                        
+                        {/* Completed Goals */}
+                        {completedGoals.length > 0 && (
+                            <div className="space-y-3">
+                                <h3 className="text-sm font-semibold text-slate-400">Completed Goals</h3>
+                                {completedGoals.map(goal => (
+                                    <div key={goal.id} className="bg-emerald-500/5 rounded-xl border border-emerald-500/20 p-3 flex items-center justify-between">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-lg">🏆</span>
+                                            <span className="text-sm text-slate-300 line-through">{goal.title}</span>
+                                        </div>
+                                        <button onClick={() => handleDeleteGoal(goal.id)} className="text-slate-500 hover:text-rose-400 text-xs" aria-label="Delete goal">🗑️</button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </>
+                )}
+            </div>
+        );
+    });
+
+    // ============================================================================
+    // SECTION 8F: NOTIFICATION CENTER
+    // ============================================================================
+    
+    const NotificationPanel = memo(({ onClose }) => {
+        const { state, dispatch } = useApp();
+        const notifications = state.notifications || [];
+        const unreadCount = notifications.filter(n => !n.read).length;
+        
+        const handleMarkRead = (id) => {
+            dispatch({ type: ActionTypes.MARK_NOTIFICATION_READ, payload: { id } });
+        };
+        
+        const handleClearAll = () => {
+            dispatch({ type: ActionTypes.CLEAR_NOTIFICATIONS });
+        };
+        
+        const handleAction = (notification) => {
+            if (notification.actionLink) {
+                dispatch({ type: ActionTypes.SET_VIEW, payload: notification.actionLink.tab });
+            }
+            handleMarkRead(notification.id);
+            onClose();
+        };
+        
+        return (
+            <div className="fixed inset-0 z-50 flex justify-end" onClick={onClose}>
+                <div className="w-full max-w-sm bg-slate-900 border-l border-slate-700 h-full overflow-y-auto shadow-2xl" 
+                     onClick={e => e.stopPropagation()} role="dialog" aria-modal="true" aria-label="Notifications">
+                    <div className="sticky top-0 bg-slate-900 p-4 border-b border-slate-700 flex items-center justify-between">
+                        <h3 className="font-bold text-white">🔔 Notifications {unreadCount > 0 && <span className="ml-1 text-xs text-indigo-400">({unreadCount} new)</span>}</h3>
+                        <div className="flex gap-2">
+                            {notifications.length > 0 && (
+                                <button onClick={handleClearAll} className="text-xs text-slate-400 hover:text-white">Clear All</button>
+                            )}
+                            <button onClick={onClose} className="text-slate-400 hover:text-white text-xl" aria-label="Close">✕</button>
+                        </div>
+                    </div>
+                    
+                    {notifications.length === 0 ? (
+                        <div className="text-center py-12 text-slate-400">
+                            <div className="text-3xl mb-2">🔔</div>
+                            <p className="text-sm">No notifications yet</p>
+                        </div>
+                    ) : (
+                        <div className="p-2 space-y-1">
+                            {notifications.map(n => (
+                                <button key={n.id} onClick={() => handleAction(n)}
+                                    className={`w-full text-left p-3 rounded-xl transition-colors ${n.read ? 'bg-slate-800/30' : 'bg-indigo-500/10 border border-indigo-500/20'}`}>
+                                    <div className="flex items-start gap-2">
+                                        <span className="text-sm">{!n.read && '🔵'}</span>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="font-medium text-white text-sm">{n.title}</div>
+                                            <div className="text-xs text-slate-400 mt-0.5">{n.message}</div>
+                                            <div className="text-xs text-slate-500 mt-1">
+                                                {new Date(n.createdAt).toLocaleString()}
+                                            </div>
+                                        </div>
+                                    </div>
+                                </button>
+                            ))}
+                        </div>
+                    )}
+                </div>
+            </div>
+        );
+    });
+
+    // ============================================================================
     // SECTION 9: MAIN APP COMPONENT
     // ============================================================================
 
@@ -6795,6 +8054,9 @@
     const App = () => {
         const [state, dispatch] = useReducer(appReducer, null, createInitialState);
         const [showAddModal, setShowAddModal] = useState(false);
+        const [showNotifications, setShowNotifications] = useState(false);
+        const [showSubjectManager, setShowSubjectManager] = useState(false);
+        const [fabOpen, setFabOpen] = useState(false);
         const isOnline = useOnlineStatus();
         
         // Load persisted state
@@ -6814,8 +8076,11 @@
             journal: JournalView,
             expenses: ExpenseView,
             settings: SettingsView,
-            matrix: MatrixView, // Keep matrix for backward compatibility
-            command: CommandDashboard // Cognitive Command Center
+            matrix: MatrixView,
+            command: CommandDashboard,
+            grades: GradeTrackerView,
+            calendar: CalendarView,
+            goals: GoalView
         };
         
         const CurrentView = viewComponents[state.view] || DashboardPage;
@@ -6865,12 +8130,26 @@
                                     {/* XP/Level Indicator */}
                                     <div className="hidden sm:flex flex-col items-end">
                                         <div className="text-xs text-indigo-400 font-semibold">
-                                            Level {state.level}
+                                            Level {state.level} • {Object.entries(CONFIG.LEVEL_TITLES).reverse().find(([lvl]) => state.level >= parseInt(lvl))?.[1] || 'Freshman'}
                                         </div>
                                         <div className="text-xs text-slate-500">
                                             {state.xp} XP
                                         </div>
                                     </div>
+                                    
+                                    {/* Notification Bell */}
+                                    <button
+                                        onClick={() => setShowNotifications(true)}
+                                        className="relative p-2 text-slate-400 hover:text-white transition-colors"
+                                        aria-label="Notifications"
+                                    >
+                                        <span className="text-lg">🔔</span>
+                                        {(state.notifications || []).filter(n => !n.read).length > 0 && (
+                                            <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 rounded-full text-xs text-white flex items-center justify-center">
+                                                {(state.notifications || []).filter(n => !n.read).length}
+                                            </span>
+                                        )}
+                                    </button>
                                     
                                     {/* Undo/Redo Buttons */}
                                     <div className="flex items-center gap-1">
@@ -6928,8 +8207,7 @@
                         <div className="max-w-2xl mx-auto px-2">
                             <div className="flex items-center justify-around py-2">
                                 {[
-                                    { id: 'dashboard', icon: '📋', label: 'Home' },
-                                    { id: 'command', icon: '🎯', label: 'Command' },
+                                    { id: 'dashboard', icon: '🏠', label: 'Home' },
                                     { id: 'study', icon: '📚', label: 'Study' },
                                     { id: 'analytics', icon: '📊', label: 'Stats' },
                                     { id: 'journal', icon: '📓', label: 'Journal' },
@@ -6959,18 +8237,51 @@
                     
                     {/* Floating Action Button (only on dashboard) */}
                     {state.view === 'dashboard' && (
-                        <button
-                            onClick={() => setShowAddModal(true)}
-                            className="fixed bottom-24 right-6 w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full shadow-lg shadow-indigo-500/30 flex items-center justify-center transition-all hover:scale-110 active:scale-95 z-30 touch-target"
-                            aria-label="Add new habit"
-                        >
-                            <span className="text-2xl text-white" aria-hidden="true">+</span>
-                        </button>
+                        <div className="fixed bottom-24 right-6 z-30">
+                            {fabOpen && (
+                                <div className="absolute bottom-16 right-0 space-y-2 mb-2">
+                                    {[
+                                        { icon: '⏱️', label: 'Start Study', action: () => dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' }) },
+                                        { icon: '📝', label: 'Add Assignment', action: () => dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' }) },
+                                        { icon: '💰', label: 'Log Expense', action: () => dispatch({ type: ActionTypes.SET_VIEW, payload: 'expenses' }) },
+                                        { icon: '📓', label: 'Write Journal', action: () => dispatch({ type: ActionTypes.SET_VIEW, payload: 'journal' }) },
+                                        { icon: '💧', label: '+1 Water', action: () => {
+                                            const today = DateUtils.toKey();
+                                            dispatch({ type: ActionTypes.LOG_WATER, payload: { date: today, glasses: (state.waterLog[today] || 0) + 1 } });
+                                            dispatch({ type: ActionTypes.ADD_XP, payload: { amount: 1 } });
+                                            showToast('+1 water 💧 +1 XP');
+                                        }},
+                                    ].map((item, i) => (
+                                        <button key={i} onClick={() => { item.action(); setFabOpen(false); }}
+                                            className="flex items-center gap-2 px-4 py-2 bg-slate-800 rounded-full shadow-lg border border-slate-700 text-white text-sm whitespace-nowrap hover:bg-slate-700 transition-colors">
+                                            <span>{item.icon}</span> {item.label}
+                                        </button>
+                                    ))}
+                                </div>
+                            )}
+                            <button
+                                onClick={() => setFabOpen(!fabOpen)}
+                                className={`w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-full shadow-lg shadow-indigo-500/30 flex items-center justify-center transition-all hover:scale-110 active:scale-95 touch-target ${fabOpen ? 'rotate-45' : ''}`}
+                                aria-label="Quick actions"
+                            >
+                                <span className="text-2xl text-white" aria-hidden="true">+</span>
+                            </button>
+                        </div>
                     )}
                     
                     {/* Global Add Modal */}
                     {showAddModal && (
                         <HabitModal onClose={() => setShowAddModal(false)} />
+                    )}
+                    
+                    {/* Notification Panel */}
+                    {showNotifications && (
+                        <NotificationPanel onClose={() => setShowNotifications(false)} />
+                    )}
+                    
+                    {/* Subject Manager */}
+                    {showSubjectManager && (
+                        <SubjectManagerModal onClose={() => setShowSubjectManager(false)} />
                     )}
                 </div>
             </AppContext.Provider>
@@ -7048,54 +8359,7 @@
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', async () => {
             try {
-                // Create inline service worker
-                const swCode = `
-                    const CACHE_NAME = 'habitos-v${CONFIG.VERSION}';
-                    const OFFLINE_URL = '/';
-                    
-                    self.addEventListener('install', (event) => {
-                        event.waitUntil(
-                            caches.open(CACHE_NAME).then((cache) => {
-                                return cache.addAll([
-                                    '/',
-                                    'https://cdn.tailwindcss.com',
-                                    'https://unpkg.com/react@18/umd/react.production.min.js',
-                                    'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js'
-                                ]);
-                            })
-                        );
-                        self.skipWaiting();
-                    });
-                    
-                    self.addEventListener('activate', (event) => {
-                        event.waitUntil(
-                            caches.keys().then((names) => {
-                                return Promise.all(
-                                    names.filter((name) => name !== CACHE_NAME)
-                                         .map((name) => caches.delete(name))
-                                );
-                            })
-                        );
-                        self.clients.claim();
-                    });
-                    
-                    self.addEventListener('fetch', (event) => {
-                        event.respondWith(
-                            caches.match(event.request).then((cached) => {
-                                return cached || fetch(event.request).catch(() => {
-                                    if (event.request.mode === 'navigate') {
-                                        return caches.match(OFFLINE_URL);
-                                    }
-                                });
-                            })
-                        );
-                    });
-                `;
-                
-                const blob = new Blob([swCode], { type: 'application/javascript' });
-                const swUrl = URL.createObjectURL(blob);
-                
-                await navigator.serviceWorker.register(swUrl);
+                await navigator.serviceWorker.register('/sw.js');
                 console.log('Service Worker registered');
             } catch (error) {
                 console.log('Service Worker registration skipped:', error.message);
@@ -7119,7 +8383,7 @@
         if (daysSinceDismissed > 7) {
             // Show install prompt after 30 seconds of usage
             setTimeout(() => {
-                if (deferredPrompt && confirm('Install HabitOS for quick access and offline support?')) {
+                if (deferredPrompt && confirm('Install StudentOS for quick access and offline support?')) {
                     deferredPrompt.prompt();
                     deferredPrompt.userChoice.then((choice) => {
                         if (choice.outcome === 'accepted') {

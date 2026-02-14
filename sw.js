@@ -1,21 +1,25 @@
-const CACHE_NAME = 'studentos-v2';
+const CACHE_VERSION = 'studentos-v3.0';
 const OFFLINE_URL = '/index.html';
 
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icons/icon-192.png.png',
+  '/icons/icon-512.png.png',
   'https://cdn.tailwindcss.com',
-  'https://unpkg.com/lucide@latest/dist/umd/lucide.min.js'
+  'https://unpkg.com/react@18/umd/react.production.min.js',
+  'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
+  'https://unpkg.com/@babel/standalone/babel.min.js',
+  'https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js',
+  'https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js'
 ];
 
 // Install event - cache assets
 self.addEventListener('install', (event) => {
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => {
-      console.log('Caching app assets');
+    caches.open(CACHE_VERSION).then((cache) => {
+      console.log('Caching app assets for', CACHE_VERSION);
       return cache.addAll(ASSETS_TO_CACHE);
     })
   );
@@ -28,7 +32,7 @@ self.addEventListener('activate', (event) => {
     caches.keys().then((cacheNames) => {
       return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
+          .filter((name) => name !== CACHE_VERSION)
           .map((name) => caches.delete(name))
       );
     })
@@ -36,13 +40,16 @@ self.addEventListener('activate', (event) => {
   self.clients.claim();
 });
 
-// Fetch event - serve from cache, fallback to network
+// Fetch event - cache-first strategy for versioned assets
 self.addEventListener('fetch', (event) => {
   if (event.request.mode === 'navigate') {
     event.respondWith(
-      fetch(event.request).catch(() => {
-        return caches.open(CACHE_NAME).then((cache) => {
-          return cache.match(OFFLINE_URL);
+      caches.match(event.request).then((cached) => {
+        if (cached) return cached;
+        return fetch(event.request).catch(() => {
+          return caches.open(CACHE_VERSION).then((cache) => {
+            return cache.match(OFFLINE_URL);
+          });
         });
       })
     );
@@ -55,52 +62,27 @@ self.addEventListener('fetch', (event) => {
         return response;
       }
       return fetch(event.request).then((response) => {
-        if (!response || response.status !== 200 || response.type !== 'basic') {
+        if (!response || response.status !== 200) {
           return response;
         }
-        const responseToCache = response.clone();
-        caches.open(CACHE_NAME).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+        // Only cache same-origin responses and successful cross-origin responses
+        if (response.type === 'basic' || response.type === 'cors') {
+          const responseToCache = response.clone();
+          caches.open(CACHE_VERSION).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
         return response;
+      }).catch(() => {
+        return new Response('Offline', { status: 503 });
       });
     })
   );
 });
 
-// Background sync for offline habit updates
+// Background sync
 self.addEventListener('sync', (event) => {
-  if (event.tag === 'sync-habits') {
-    event.waitUntil(syncHabits());
-  }
-});
-
-async function syncHabits() {
-  // Sync logic when back online for StudentOS
-  console.log('Syncing StudentOS data...');
-}
-
-// Push notifications
-self.addEventListener('push', (event) => {
-  const data = event.data?.json() ?? {};
-  const title = data.title || '📚 StudentOS Reminder';
-  const options = {
-    body: data.body || "Time to check in with your student life!",
-    icon: '/icons/icon-192.png',
-    badge: '/icons/icon-192.png',
-    vibrate: [100, 50, 100],
-    data: { url: '/' },
-    actions: [
-      { action: 'check', title: '✓ Check Now' },
-      { action: 'dismiss', title: 'Later' }
-    ]
-  };
-  event.waitUntil(self.registration.showNotification(title, options));
-});
-
-self.addEventListener('notificationclick', (event) => {
-  event.notification.close();
-  if (event.action === 'check' || !event.action) {
-    event.waitUntil(clients.openWindow('/'));
+  if (event.tag === 'sync-data') {
+    event.waitUntil(Promise.resolve());
   }
 });

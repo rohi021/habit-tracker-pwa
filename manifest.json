@@ -4,27 +4,27 @@
   "description": "Complete student life management platform - study tracking, assignments, expenses, wellness, goals, and more",
   "start_url": "/index.html",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#4f46e5",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
   "orientation": "any",
   "scope": "/",
   "lang": "en",
   "categories": ["productivity", "education", "lifestyle", "health"],
   "icons": [
     {
-      "src": "icons/icon-192.png",
+      "src": "icons/icon-192.png.png",
       "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-512.png",
+      "src": "icons/icon-512.png.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "icons/icon-maskable.png",
+      "src": "icons/icon-maskable.png.png",
       "sizes": "512x512",
       "type": "image/png",
       "purpose": "maskable"
@@ -45,28 +45,28 @@
       "short_name": "Study",
       "description": "Start a study session",
       "url": "/index.html?view=study",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "icons/icon-192.png.png", "sizes": "192x192" }]
     },
     {
       "name": "Add Assignment",
       "short_name": "Assignment",
       "description": "Add new assignment or exam",
       "url": "/index.html?view=study&action=add-assignment",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "icons/icon-192.png.png", "sizes": "192x192" }]
     },
     {
       "name": "Log Expense",
       "short_name": "Expense",
       "description": "Track an expense",
       "url": "/index.html?view=expenses",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "icons/icon-192.png.png", "sizes": "192x192" }]
     },
     {
       "name": "Daily Journal",
       "short_name": "Journal",
       "description": "Write journal entry",
       "url": "/index.html?view=journal",
-      "icons": [{ "src": "icons/icon-192.png", "sizes": "192x192" }]
+      "icons": [{ "src": "icons/icon-192.png.png", "sizes": "192x192" }]
     }
   ],
   "related_applications": [],
