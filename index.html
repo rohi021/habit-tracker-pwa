@@ -5681,6 +5681,7 @@
                                 const now = new Date();
                                 now.setHours(0, 0, 0, 0);
                                 const daysLeft = Math.ceil((examDate - now) / (1000 * 60 * 60 * 24));
+                                const prepProg = exam.prepProgress || exam.progress || 0;
                                 return (
                                     <div key={exam.id} className="bg-slate-800/50 rounded-lg p-3">
                                         <div className="flex items-center justify-between">
@@ -5694,20 +5695,20 @@
                                                 {daysLeft < 0 ? 'Overdue' : daysLeft === 0 ? 'Today!' : daysLeft === 1 ? 'Tomorrow' : `${daysLeft}d`}
                                             </div>
                                         </div>
-                                        {(exam.prepProgress || 0) > 0 ? (
+                                        {prepProg > 0 ? (
                                             <div className="mt-2">
                                                 <div className="flex items-center justify-between mb-1">
                                                     <span className="text-xs text-slate-400">Prep Progress</span>
                                                     <span className={`text-xs font-semibold ${
-                                                        exam.prepProgress >= 75 ? 'text-emerald-400' : exam.prepProgress >= 50 ? 'text-yellow-400' : 'text-amber-400'
-                                                    }`}>{exam.prepProgress}%</span>
+                                                        prepProg >= 75 ? 'text-emerald-400' : prepProg >= 50 ? 'text-yellow-400' : 'text-amber-400'
+                                                    }`}>{prepProg}%</span>
                                                 </div>
                                                 <div className="w-full bg-slate-700 rounded-full h-1.5">
                                                     <div className={`h-1.5 rounded-full transition-all ${
-                                                        exam.prepProgress >= 75 ? 'bg-emerald-500' : exam.prepProgress >= 50 ? 'bg-yellow-500' : 'bg-amber-500'
-                                                    }`} style={{ width: `${Math.min(exam.prepProgress, 100)}%` }}></div>
+                                                        prepProg >= 75 ? 'bg-emerald-500' : prepProg >= 50 ? 'bg-yellow-500' : 'bg-amber-500'
+                                                    }`} style={{ width: `${Math.min(prepProg, 100)}%` }}></div>
                                                 </div>
-                                                {exam.prepProgress < 50 && (
+                                                {prepProg < 50 && (
                                                     <div className="text-xs text-amber-400/80 mt-1">Keep going — still a lot to cover! 💪</div>
                                                 )}
                                             </div>
