@@ -2947,15 +2947,17 @@
                     if (!parsed.grades) parsed.grades = { semesters: [] };
                     if (!parsed.notifications) parsed.notifications = [];
                     if (!parsed._version) parsed._version = '3.0.0';
-                    // Migrate subjects from string array to object array
+                    // Migrate subjects from string array to object array (only once)
                     if (parsed.subjects && parsed.subjects.length > 0 && typeof parsed.subjects[0] === 'string') {
-                        parsed.subjects = parsed.subjects.map(name => ({
-                            id: crypto.randomUUID(),
+                        parsed.subjects = parsed.subjects.map((name, idx) => ({
+                            id: `subj-migrated-${idx}`,
                             name,
-                            color: 'indigo',
+                            color: Object.keys(CONFIG.COLORS)[idx % Object.keys(CONFIG.COLORS).length],
                             icon: '📘',
                             weeklyGoalHours: 5
                         }));
+                        // Re-save immediately to persist migration
+                        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({ ...parsed, _version: '3.0.0' }));
                     }
                     dispatch({ type: ActionTypes.LOAD_STATE, payload: parsed });
                 } else {
@@ -4017,6 +4019,10 @@
         }, [isRunning]);
         
         const handleStart = () => {
+            if (!selectedSubject) {
+                showToast('Please add a subject first in Settings', 'error');
+                return;
+            }
             if (!state.activeStudySession) {
                 dispatch({
                     type: ActionTypes.START_STUDY_SESSION,
@@ -5548,7 +5554,7 @@
                 {/* Motivational Quote */}
                 <div className="bg-gradient-to-r from-indigo-500/10 to-purple-500/10 rounded-xl p-4 border border-indigo-500/20 mb-6">
                     <p className="text-sm text-slate-300 italic">
-                        "{MOTIVATIONAL_QUOTES[Math.floor((new Date().getFullYear() * 366 + Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24))) % MOTIVATIONAL_QUOTES.length)]}"
+                        "{MOTIVATIONAL_QUOTES[new Date().getDate() + new Date().getMonth() * 31 % MOTIVATIONAL_QUOTES.length]}"
                     </p>
                 </div>
                 

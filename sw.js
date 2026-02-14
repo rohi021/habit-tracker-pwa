@@ -5,8 +5,8 @@ const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
-  '/icons/icon-192.png',
-  '/icons/icon-512.png',
+  '/icons/icon-192.png.png',
+  '/icons/icon-512.png.png',
   'https://cdn.tailwindcss.com',
   'https://unpkg.com/react@18/umd/react.production.min.js',
   'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js',
@@ -65,10 +65,13 @@ self.addEventListener('fetch', (event) => {
         if (!response || response.status !== 200) {
           return response;
         }
-        const responseToCache = response.clone();
-        caches.open(CACHE_VERSION).then((cache) => {
-          cache.put(event.request, responseToCache);
-        });
+        // Only cache same-origin responses and successful cross-origin responses
+        if (response.type === 'basic' || response.type === 'cors') {
+          const responseToCache = response.clone();
+          caches.open(CACHE_VERSION).then((cache) => {
+            cache.put(event.request, responseToCache);
+          });
+        }
         return response;
       }).catch(() => {
         return new Response('Offline', { status: 503 });
