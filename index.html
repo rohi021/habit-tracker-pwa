@@ -10,7 +10,7 @@
     <title>StudentOS | Complete Student Life Management</title>
     
     <!-- PWA -->
-    <link rel="manifest" href="data:application/json;base64,eyJuYW1lIjoiSGFiaXRPUyIsInNob3J0X25hbWUiOiJIYWJpdE9TIiwic3RhcnRfdXJsIjoiLiIsImRpc3BsYXkiOiJzdGFuZGFsb25lIiwiYmFja2dyb3VuZF9jb2xvciI6IiMwZjE3MmEiLCJ0aGVtZV9jb2xvciI6IiM2MzY2ZjEifQ==">
+    <link rel="manifest" href="manifest.json">
     <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📊</text></svg>">
     
     <!-- Preload Critical Resources -->
@@ -40,6 +40,7 @@
     <script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
     <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4/dist/chart.umd.min.js"></script>
     
     <style>
         /* ==================== BASE STYLES ==================== */
@@ -67,6 +68,16 @@
         body.light {
             background: #f8fafc;
             color: #0f172a;
+        }
+        
+        /* AMOLED mode */
+        body.amoled {
+            background: #000000;
+            color: #f8fafc;
+        }
+        
+        body.amoled .glass {
+            background: rgba(0, 0, 0, 0.9);
         }
         
         /* ==================== ACCESSIBILITY ==================== */
@@ -218,8 +229,8 @@
      */
     const CONFIG = Object.freeze({
         APP_NAME: 'StudentOS',
-        VERSION: '2.0.0',
-        STORAGE_KEY: 'studentos-v2', // Changed from habitos-v2 for migration
+        VERSION: '3.0.0',
+        STORAGE_KEY: 'studentos-v3',
         MAX_UNDO_STACK: 30,
         DEBOUNCE_MS: 500,
         MIN_DATA_POINTS_FOR_INSIGHTS: 7,
@@ -246,15 +257,15 @@
         MAX_LEVEL: 50,
         LEVEL_TITLES: Object.freeze({
             1: 'Freshman',
-            5: 'Student',
-            10: 'Scholar',
-            15: 'Achiever',
-            20: 'Expert',
-            25: 'Master',
-            30: 'Sage',
-            35: 'Virtuoso',
-            40: 'Legend',
-            50: 'Valedictorian'
+            6: 'Sophomore',
+            11: 'Scholar',
+            16: 'Achiever',
+            21: 'Expert',
+            26: 'Master',
+            31: 'Sage',
+            36: 'Virtuoso',
+            41: 'Legend',
+            46: 'Valedictorian'
         }),
         // Mood emojis
         MOODS: Object.freeze({
@@ -267,8 +278,179 @@
     });
 
     // ============================================================================
-    // SECTION 2: UTILITY FUNCTIONS (Pure, Testable)
+    // MOTIVATIONAL QUOTES (50+)
     // ============================================================================
+    const MOTIVATIONAL_QUOTES = [
+        "The secret of getting ahead is getting started. — Mark Twain",
+        "It always seems impossible until it's done. — Nelson Mandela",
+        "Education is the most powerful weapon. — Nelson Mandela",
+        "The only way to do great work is to love what you do. — Steve Jobs",
+        "Success is not final, failure is not fatal: it is the courage to continue that counts. — Winston Churchill",
+        "Believe you can and you're halfway there. — Theodore Roosevelt",
+        "The future belongs to those who believe in the beauty of their dreams. — Eleanor Roosevelt",
+        "In the middle of difficulty lies opportunity. — Albert Einstein",
+        "What we know is a drop, what we don't know is an ocean. — Isaac Newton",
+        "Learning never exhausts the mind. — Leonardo da Vinci",
+        "The mind is not a vessel to be filled, but a fire to be kindled. — Plutarch",
+        "An investment in knowledge pays the best interest. — Benjamin Franklin",
+        "The beautiful thing about learning is that nobody can take it away from you. — B.B. King",
+        "Don't let what you cannot do interfere with what you can do. — John Wooden",
+        "The expert in anything was once a beginner. — Helen Hayes",
+        "Small daily improvements over time lead to stunning results. — Robin Sharma",
+        "You don't have to be great to start, but you have to start to be great. — Zig Ziglar",
+        "Discipline is the bridge between goals and accomplishment. — Jim Rohn",
+        "The only limit to our realization of tomorrow is our doubts of today. — Franklin D. Roosevelt",
+        "Strive for progress, not perfection. — Unknown",
+        "Success is the sum of small efforts repeated day in and day out. — Robert Collier",
+        "Your limitation — it's only your imagination.",
+        "Push yourself, because no one else is going to do it for you.",
+        "Great things never come from comfort zones.",
+        "Dream it. Wish it. Do it.",
+        "Don't stop when you're tired. Stop when you're done.",
+        "Wake up with determination. Go to bed with satisfaction.",
+        "Do something today that your future self will thank you for.",
+        "Little things make big days.",
+        "It's going to be hard, but hard does not mean impossible.",
+        "Don't wait for opportunity. Create it.",
+        "The harder you work for something, the greater you'll feel when you achieve it.",
+        "Dream bigger. Do bigger.",
+        "Don't watch the clock; do what it does. Keep going. — Sam Levenson",
+        "The way to get started is to quit talking and begin doing. — Walt Disney",
+        "Knowledge is power. — Francis Bacon",
+        "Live as if you were to die tomorrow. Learn as if you were to live forever. — Mahatma Gandhi",
+        "Education is not preparation for life; education is life itself. — John Dewey",
+        "The roots of education are bitter, but the fruit is sweet. — Aristotle",
+        "Start where you are. Use what you have. Do what you can. — Arthur Ashe",
+        "A journey of a thousand miles begins with a single step. — Lao Tzu",
+        "The best time to plant a tree was 20 years ago. The second best time is now.",
+        "You are never too old to set another goal or to dream a new dream. — C.S. Lewis",
+        "Quality is not an act, it is a habit. — Aristotle",
+        "Persistence guarantees that results are inevitable. — Paramahansa Yogananda",
+        "Be the change that you wish to see in the world. — Mahatma Gandhi",
+        "Well done is better than well said. — Benjamin Franklin",
+        "It does not matter how slowly you go as long as you do not stop. — Confucius",
+        "With self-discipline most anything is possible. — Theodore Roosevelt",
+        "Action is the foundational key to all success. — Pablo Picasso",
+        "The only person you are destined to become is the person you decide to be. — Ralph Waldo Emerson",
+        "Focus on being productive instead of busy. — Tim Ferriss",
+        "Winners are not people who never fail, but people who never quit.",
+    ];
+
+    // ============================================================================
+    // ACHIEVEMENT DEFINITIONS (50+)
+    // ============================================================================
+    const ACHIEVEMENT_DEFS = [
+        { id: 'first_steps', icon: '👣', title: 'First Steps', desc: 'Complete your first habit', xp: 25 },
+        { id: 'bookworm', icon: '📖', title: 'Bookworm', desc: 'Study for 10 hours total', xp: 50 },
+        { id: 'on_fire', icon: '🔥', title: 'On Fire', desc: 'Reach a 7-day streak', xp: 50 },
+        { id: 'centurion', icon: '💯', title: 'Centurion', desc: 'Earn 100 XP', xp: 25 },
+        { id: 'marathon', icon: '🏃', title: 'Marathon', desc: '3-hour single study session', xp: 75 },
+        { id: 'planner', icon: '📋', title: 'Planner', desc: 'Add 10 assignments', xp: 50 },
+        { id: 'completionist', icon: '✅', title: 'Completionist', desc: 'Complete 10 assignments', xp: 75 },
+        { id: 'budget_master', icon: '💰', title: 'Budget Master', desc: 'Stay under budget for a full month', xp: 100 },
+        { id: 'sleep_champion', icon: '😴', title: 'Sleep Champion', desc: 'Log 7+ hours sleep for 7 days', xp: 50 },
+        { id: 'hydration_hero', icon: '💧', title: 'Hydration Hero', desc: 'Hit water goal for 7 days', xp: 50 },
+        { id: 'active_lifestyle', icon: '💪', title: 'Active Lifestyle', desc: '5 exercise sessions in a week', xp: 50 },
+        { id: 'dear_diary', icon: '📔', title: 'Dear Diary', desc: 'Write 30 journal entries', xp: 75 },
+        { id: 'night_owl', icon: '🦉', title: 'Night Owl', desc: 'Study session after 11 PM', xp: 25 },
+        { id: 'early_bird', icon: '🐦', title: 'Early Bird', desc: 'Study session before 7 AM', xp: 25 },
+        { id: 'polymath', icon: '🧠', title: 'Polymath', desc: 'Study 5+ subjects in one week', xp: 75 },
+        { id: 'perfect_week', icon: '⭐', title: 'Perfect Week', desc: 'All habits every day for 7 days', xp: 100 },
+        { id: 'semester_strong', icon: '🎓', title: 'Semester Strong', desc: 'Maintain 3.5+ GPA', xp: 75 },
+        { id: 'goal_getter', icon: '🎯', title: 'Goal Getter', desc: 'Complete 5 goals', xp: 75 },
+        { id: 'centurion_plus', icon: '🏆', title: 'Centurion Plus', desc: 'Earn 1000 XP', xp: 50 },
+        { id: 'scholar', icon: '📚', title: 'Scholar', desc: 'Reach level 20', xp: 75 },
+        { id: 'legend', icon: '🌟', title: 'Legend', desc: 'Reach level 40', xp: 100 },
+        { id: 'valedictorian', icon: '👑', title: 'Valedictorian', desc: 'Reach level 50', xp: 100 },
+        { id: 'social_butterfly', icon: '🦋', title: 'Social Butterfly', desc: 'Log social mood factor 10 times', xp: 50 },
+        { id: 'zen_master', icon: '🧘', title: 'Zen Master', desc: '7 days mindfulness habit', xp: 50 },
+        { id: 'financial_wizard', icon: '🧙', title: 'Financial Wizard', desc: '3 months under budget', xp: 100 },
+        { id: 'topic_master', icon: '📝', title: 'Topic Master', desc: 'Cover all syllabus topics for an exam', xp: 75 },
+        { id: 'streak_master', icon: '🔥', title: 'Streak Master', desc: '30-day streak on any habit', xp: 100 },
+        { id: 'century_journal', icon: '📓', title: 'Century Journal', desc: '100 journal entries', xp: 100 },
+        { id: 'fitness_freak', icon: '🏋️', title: 'Fitness Freak', desc: '30 exercise logs', xp: 75 },
+        { id: 'consistency_king', icon: '♛', title: 'Consistency King', desc: 'Complete all habits for 30 days', xp: 100 },
+        { id: 'deans_list', icon: '🎖️', title: "Dean's List", desc: 'Semester GPA 3.8+', xp: 100 },
+        { id: 'early_adopter', icon: '🚀', title: 'Early Adopter', desc: 'Use StudentOS for the first time', xp: 25 },
+        { id: 'data_driven', icon: '📊', title: 'Data Driven', desc: 'Check analytics 10 times', xp: 25 },
+        { id: 'habit_builder', icon: '🏗️', title: 'Habit Builder', desc: 'Create 5 habits', xp: 50 },
+        { id: 'time_lord', icon: '⏰', title: 'Time Lord', desc: 'Log 50 hours of study', xp: 75 },
+        { id: 'wellness_warrior', icon: '🛡️', title: 'Wellness Warrior', desc: 'Log all wellness metrics in one day', xp: 50 },
+        { id: 'budget_hawk', icon: '🦅', title: 'Budget Hawk', desc: 'Log 50 expenses', xp: 50 },
+        { id: 'grade_tracker', icon: '📈', title: 'Grade Tracker', desc: 'Log your first assessment', xp: 25 },
+        { id: 'milestone_maker', icon: '🏁', title: 'Milestone Maker', desc: 'Complete 10 milestones', xp: 50 },
+        { id: 'organized', icon: '🗂️', title: 'Organized', desc: 'Add 5 timetable entries', xp: 50 },
+        { id: 'pomodoro_pro', icon: '🍅', title: 'Pomodoro Pro', desc: 'Complete 25 Pomodoro cycles', xp: 75 },
+        { id: 'word_smith', icon: '✍️', title: 'Word Smith', desc: 'Write a 500+ word journal entry', xp: 50 },
+        { id: 'subject_master', icon: '🎯', title: 'Subject Master', desc: 'Create 5 custom subjects', xp: 25 },
+        { id: 'water_week', icon: '🌊', title: 'Water Week', desc: 'Hit water goal 7 consecutive days', xp: 50 },
+        { id: 'exam_ace', icon: '💎', title: 'Exam Ace', desc: 'Complete 5 exams', xp: 75 },
+        { id: 'self_aware', icon: '🪞', title: 'Self Aware', desc: 'Log mood for 14 consecutive days', xp: 50 },
+        { id: 'study_diverse', icon: '🌈', title: 'Study Diverse', desc: 'Study 3 subjects in one day', xp: 50 },
+        { id: 'level_10', icon: '🔟', title: 'Double Digits', desc: 'Reach level 10', xp: 50 },
+        { id: 'gratitude', icon: '🙏', title: 'Grateful Heart', desc: 'Write gratitude 7 days in a row', xp: 50 },
+        { id: 'calendar_king', icon: '📅', title: 'Calendar King', desc: 'Have events on 5 different days this week', xp: 50 },
+        { id: 'power_hour', icon: '⚡', title: 'Power Hour', desc: 'Study for 60 minutes without pausing', xp: 50 },
+        { id: 'five_k_xp', icon: '🌟', title: '5K XP', desc: 'Earn 5000 total XP', xp: 100 },
+    ];
+
+    // ============================================================================
+    // DAILY CHALLENGE POOL (50+)
+    // ============================================================================
+    const DAILY_CHALLENGE_POOL = [
+        { text: 'Study for 1 hour', type: 'study', target: 60, xp: 15 },
+        { text: 'Study for 2 hours', type: 'study', target: 120, xp: 20 },
+        { text: 'Log all meals as expenses', type: 'expense', target: 3, xp: 10 },
+        { text: 'Complete all habits today', type: 'habits_all', target: 1, xp: 20 },
+        { text: 'Write a journal entry with 200+ words', type: 'journal_words', target: 200, xp: 15 },
+        { text: 'Drink 8 glasses of water', type: 'water', target: 8, xp: 10 },
+        { text: 'Exercise for 30 minutes', type: 'exercise', target: 30, xp: 15 },
+        { text: "Study a subject you haven't touched in 3 days", type: 'study_neglected', target: 1, xp: 20 },
+        { text: 'Write 3 gratitude items', type: 'gratitude', target: 3, xp: 10 },
+        { text: 'Review upcoming deadlines', type: 'review_deadlines', target: 1, xp: 10 },
+        { text: 'Update exam preparation progress', type: 'exam_progress', target: 1, xp: 10 },
+        { text: 'Complete 3 habits', type: 'habits', target: 3, xp: 15 },
+        { text: 'Log your sleep data', type: 'sleep', target: 1, xp: 10 },
+        { text: 'Track your mood today', type: 'mood', target: 1, xp: 10 },
+        { text: 'Add a new assignment or task', type: 'assignment', target: 1, xp: 10 },
+        { text: 'Complete a Pomodoro cycle', type: 'pomodoro', target: 1, xp: 15 },
+        { text: 'Study before 9 AM', type: 'early_study', target: 1, xp: 15 },
+        { text: 'Log 3 expenses today', type: 'expense_count', target: 3, xp: 10 },
+        { text: 'Complete 5 habits', type: 'habits', target: 5, xp: 20 },
+        { text: 'Study 3 different subjects', type: 'study_variety', target: 3, xp: 20 },
+        { text: 'Write in your journal', type: 'journal', target: 1, xp: 10 },
+        { text: 'Get 7+ hours of sleep', type: 'sleep_hours', target: 7, xp: 15 },
+        { text: 'Do a 45-minute study session', type: 'study_session', target: 45, xp: 15 },
+        { text: 'Update a goal milestone', type: 'milestone', target: 1, xp: 10 },
+        { text: 'Review your weekly stats', type: 'review_stats', target: 1, xp: 10 },
+        { text: 'Complete an assignment', type: 'complete_assignment', target: 1, xp: 20 },
+        { text: 'Study for 3 hours total', type: 'study', target: 180, xp: 25 },
+        { text: 'Log exercise and sleep today', type: 'wellness_combo', target: 2, xp: 15 },
+        { text: 'Drink 6 glasses of water', type: 'water', target: 6, xp: 10 },
+        { text: 'Complete 2 Pomodoro cycles', type: 'pomodoro', target: 2, xp: 20 },
+        { text: 'Add subtasks to an assignment', type: 'subtasks', target: 1, xp: 10 },
+        { text: 'Log your mood and energy levels', type: 'mood_energy', target: 1, xp: 10 },
+        { text: 'Study a subject for 30 minutes', type: 'study_focused', target: 30, xp: 10 },
+        { text: 'Write a 100+ word journal entry', type: 'journal_words', target: 100, xp: 10 },
+        { text: 'Check your budget remaining', type: 'budget_check', target: 1, xp: 10 },
+        { text: 'Exercise for 15 minutes', type: 'exercise', target: 15, xp: 10 },
+        { text: 'Review your habit streaks', type: 'review_streaks', target: 1, xp: 10 },
+        { text: 'Study without distractions for 25 min', type: 'focus_study', target: 25, xp: 15 },
+        { text: 'Complete a habit you skipped yesterday', type: 'catch_up', target: 1, xp: 15 },
+        { text: 'Update your timetable', type: 'timetable', target: 1, xp: 10 },
+        { text: 'Add notes to a study session', type: 'study_notes', target: 1, xp: 10 },
+        { text: 'Reach your daily study goal', type: 'study_goal', target: 1, xp: 20 },
+        { text: 'Log a bedtime before 11 PM', type: 'early_sleep', target: 1, xp: 15 },
+        { text: 'Plan tomorrow by reviewing your schedule', type: 'plan', target: 1, xp: 10 },
+        { text: 'Complete all daily challenges', type: 'meta', target: 1, xp: 25 },
+        { text: 'Add a goal with milestones', type: 'goal', target: 1, xp: 15 },
+        { text: 'Study 2 subjects today', type: 'study_variety', target: 2, xp: 15 },
+        { text: 'Log your water intake consistently', type: 'water', target: 5, xp: 10 },
+        { text: 'Meditate or do mindfulness for 10 min', type: 'mindfulness', target: 10, xp: 15 },
+        { text: 'Read for 20 minutes', type: 'reading', target: 20, xp: 10 },
+        { text: 'Walk or stretch for 10 minutes', type: 'exercise', target: 10, xp: 10 },
+        { text: 'Organize your study materials', type: 'organize', target: 1, xp: 10 },
+    ];
 
     /**
      * Date utilities
@@ -1722,7 +1904,7 @@
         // ===== NEW: Study Session Tracker =====
         studySessions: [], // { id, subject, startTime, endTime, duration, notes, date, type: 'regular'|'pomodoro' }
         studyGoal: { daily: 120, weekly: 600 }, // minutes
-        subjects: ['Math', 'Science', 'English', 'History', 'Computer Science', 'Literature', 'Physics', 'Chemistry', 'Biology', 'Other'],
+        subjects: [], // User-created subject list - SINGLE SOURCE OF TRUTH
         activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime }
         
         // ===== NEW: Assignments & Exams =====
@@ -1766,6 +1948,14 @@
         achievements: [], // earned achievement IDs
         dailyChallenges: [], // { id, text, type, target, progress, completed, date, xpReward }
         
+        // ===== Grade Tracker =====
+        grades: {
+            semesters: [] // { id, name, courses: [{ id, subjectId, creditHours, assessments: [{ id, name, type, weight, score, maxScore }], gradingScale }] }
+        },
+        
+        // ===== Notifications =====
+        notifications: [], // { id, type, title, message, read, createdAt, actionLink: { tab, subTab } }
+        
         // Settings (Enhanced)
         settings: {
             theme: 'dark',
@@ -1773,9 +1963,15 @@
             hapticEnabled: true,
             reminderTime: '21:00',
             weekStartsOn: 0, // 0 = Sunday
-            // New settings
+            currency: '₹',
+            timeFormat: '12h',
+            pomodoroStudy: 25,
+            pomodoroShortBreak: 5,
+            pomodoroLongBreak: 15,
+            pomodoroCycles: 4,
             studyReminderEnabled: true,
             dailyStudyGoal: 120, // minutes
+            weeklyStudyGoal: 600,
             monthlyBudget: 5000,
             waterGoal: 8,
             sleepGoal: 8,
@@ -1788,7 +1984,9 @@
         
         // Meta
         lastSyncedAt: null,
-        appVersion: '2.0.0' // Updated for StudentOS
+        _version: '3.0.0',
+        _lastSaved: new Date().toISOString(),
+        appVersion: '3.0.0'
     });
 
     /**
@@ -1862,6 +2060,23 @@
         EARN_ACHIEVEMENT: 'EARN_ACHIEVEMENT',
         GENERATE_DAILY_CHALLENGES: 'GENERATE_DAILY_CHALLENGES',
         COMPLETE_CHALLENGE: 'COMPLETE_CHALLENGE',
+        
+        // Subjects
+        ADD_SUBJECT: 'ADD_SUBJECT',
+        UPDATE_SUBJECT: 'UPDATE_SUBJECT',
+        DELETE_SUBJECT: 'DELETE_SUBJECT',
+        
+        // Grades
+        ADD_SEMESTER: 'ADD_SEMESTER',
+        ADD_COURSE: 'ADD_COURSE',
+        ADD_ASSESSMENT: 'ADD_ASSESSMENT',
+        UPDATE_ASSESSMENT: 'UPDATE_ASSESSMENT',
+        DELETE_ASSESSMENT: 'DELETE_ASSESSMENT',
+        
+        // Notifications
+        ADD_NOTIFICATION: 'ADD_NOTIFICATION',
+        MARK_NOTIFICATION_READ: 'MARK_NOTIFICATION_READ',
+        CLEAR_NOTIFICATIONS: 'CLEAR_NOTIFICATIONS',
         
         // UI
         SET_VIEW: 'SET_VIEW',
@@ -2456,43 +2671,28 @@
                 
                 if (existingChallenges.length > 0) return state;
                 
-                // Generate 3 daily challenges
-                const challenges = [
-                    {
+                // Deterministic selection based on day-of-year
+                const dayOfYear = Math.floor((new Date() - new Date(new Date().getFullYear(), 0, 0)) / (1000 * 60 * 60 * 24));
+                const poolSize = DAILY_CHALLENGE_POOL.length;
+                const selected = [];
+                for (let i = 0; i < 3; i++) {
+                    const idx = (dayOfYear * 7 + i * 13) % poolSize;
+                    const challenge = DAILY_CHALLENGE_POOL[idx];
+                    selected.push({
                         id: crypto.randomUUID(),
-                        text: 'Study for 2 hours today',
-                        type: 'study',
-                        target: 120,
+                        text: challenge.text,
+                        type: challenge.type,
+                        target: challenge.target,
                         progress: 0,
                         completed: false,
                         date: today,
-                        xpReward: 30
-                    },
-                    {
-                        id: crypto.randomUUID(),
-                        text: 'Drink 8 glasses of water',
-                        type: 'water',
-                        target: 8,
-                        progress: 0,
-                        completed: false,
-                        date: today,
-                        xpReward: 20
-                    },
-                    {
-                        id: crypto.randomUUID(),
-                        text: 'Complete 3 habits',
-                        type: 'habits',
-                        target: 3,
-                        progress: 0,
-                        completed: false,
-                        date: today,
-                        xpReward: 25
-                    }
-                ];
+                        xpReward: challenge.xp
+                    });
+                }
                 
                 return {
                     ...state,
-                    dailyChallenges: challenges
+                    dailyChallenges: selected
                 };
             }
             
@@ -2509,6 +2709,122 @@
                     ...state,
                     dailyChallenges: updatedChallenges,
                     xp: state.xp + challenge.xpReward
+                };
+            }
+            
+            // ===== SUBJECT MANAGEMENT =====
+            case ActionTypes.ADD_SUBJECT: {
+                return {
+                    ...state,
+                    subjects: [...state.subjects, payload]
+                };
+            }
+            
+            case ActionTypes.UPDATE_SUBJECT: {
+                return {
+                    ...state,
+                    subjects: state.subjects.map(s => s.id === payload.id ? { ...s, ...payload } : s)
+                };
+            }
+            
+            case ActionTypes.DELETE_SUBJECT: {
+                return {
+                    ...state,
+                    subjects: state.subjects.filter(s => s.id !== payload.id)
+                };
+            }
+            
+            // ===== GRADE TRACKER =====
+            case ActionTypes.ADD_SEMESTER: {
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: [...(state.grades?.semesters || []), payload]
+                    }
+                };
+            }
+            
+            case ActionTypes.ADD_COURSE: {
+                const { semesterId, course } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === semesterId
+                                ? { ...sem, courses: [...(sem.courses || []), course] }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.ADD_ASSESSMENT: {
+                const { semesterId: semId, courseId, assessment } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === semId
+                                ? {
+                                    ...sem,
+                                    courses: (sem.courses || []).map(c =>
+                                        c.id === courseId
+                                            ? { ...c, assessments: [...(c.assessments || []), assessment] }
+                                            : c
+                                    )
+                                }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.DELETE_ASSESSMENT: {
+                const { semesterId: dSemId, courseId: dCourseId, assessmentId } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === dSemId
+                                ? {
+                                    ...sem,
+                                    courses: (sem.courses || []).map(c =>
+                                        c.id === dCourseId
+                                            ? { ...c, assessments: (c.assessments || []).filter(a => a.id !== assessmentId) }
+                                            : c
+                                    )
+                                }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            // ===== NOTIFICATIONS =====
+            case ActionTypes.ADD_NOTIFICATION: {
+                return {
+                    ...state,
+                    notifications: [payload, ...(state.notifications || [])].slice(0, 50)
+                };
+            }
+            
+            case ActionTypes.MARK_NOTIFICATION_READ: {
+                return {
+                    ...state,
+                    notifications: (state.notifications || []).map(n =>
+                        n.id === payload.id ? { ...n, read: true } : n
+                    )
+                };
+            }
+            
+            case ActionTypes.CLEAR_NOTIFICATIONS: {
+                return {
+                    ...state,
+                    notifications: []
                 };
             }
             
@@ -6928,8 +7244,7 @@
                         <div className="max-w-2xl mx-auto px-2">
                             <div className="flex items-center justify-around py-2">
                                 {[
-                                    { id: 'dashboard', icon: '📋', label: 'Home' },
-                                    { id: 'command', icon: '🎯', label: 'Command' },
+                                    { id: 'dashboard', icon: '🏠', label: 'Home' },
                                     { id: 'study', icon: '📚', label: 'Study' },
                                     { id: 'analytics', icon: '📊', label: 'Stats' },
                                     { id: 'journal', icon: '📓', label: 'Journal' },
@@ -7048,54 +7363,7 @@
     if ('serviceWorker' in navigator) {
         window.addEventListener('load', async () => {
             try {
-                // Create inline service worker
-                const swCode = `
-                    const CACHE_NAME = 'habitos-v${CONFIG.VERSION}';
-                    const OFFLINE_URL = '/';
-                    
-                    self.addEventListener('install', (event) => {
-                        event.waitUntil(
-                            caches.open(CACHE_NAME).then((cache) => {
-                                return cache.addAll([
-                                    '/',
-                                    'https://cdn.tailwindcss.com',
-                                    'https://unpkg.com/react@18/umd/react.production.min.js',
-                                    'https://unpkg.com/react-dom@18/umd/react-dom.production.min.js'
-                                ]);
-                            })
-                        );
-                        self.skipWaiting();
-                    });
-                    
-                    self.addEventListener('activate', (event) => {
-                        event.waitUntil(
-                            caches.keys().then((names) => {
-                                return Promise.all(
-                                    names.filter((name) => name !== CACHE_NAME)
-                                         .map((name) => caches.delete(name))
-                                );
-                            })
-                        );
-                        self.clients.claim();
-                    });
-                    
-                    self.addEventListener('fetch', (event) => {
-                        event.respondWith(
-                            caches.match(event.request).then((cached) => {
-                                return cached || fetch(event.request).catch(() => {
-                                    if (event.request.mode === 'navigate') {
-                                        return caches.match(OFFLINE_URL);
-                                    }
-                                });
-                            })
-                        );
-                    });
-                `;
-                
-                const blob = new Blob([swCode], { type: 'application/javascript' });
-                const swUrl = URL.createObjectURL(blob);
-                
-                await navigator.serviceWorker.register(swUrl);
+                await navigator.serviceWorker.register('/sw.js');
                 console.log('Service Worker registered');
             } catch (error) {
                 console.log('Service Worker registration skipped:', error.message);
@@ -7119,7 +7387,7 @@
         if (daysSinceDismissed > 7) {
             // Show install prompt after 30 seconds of usage
             setTimeout(() => {
-                if (deferredPrompt && confirm('Install HabitOS for quick access and offline support?')) {
+                if (deferredPrompt && confirm('Install StudentOS for quick access and offline support?')) {
                     deferredPrompt.prompt();
                     deferredPrompt.userChoice.then((choice) => {
                         if (choice.outcome === 'accepted') {
