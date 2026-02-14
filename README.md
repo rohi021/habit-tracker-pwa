@@ -11,8 +11,8 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![PWA](https://img.shields.io/badge/PWA-enabled-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)](https://web.dev/progressive-web-apps/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
-[![Lines of Code](https://img.shields.io/badge/Lines_of_Code-8400+-orange?style=for-the-badge)]()
-[![No Backend](https://img.shields.io/badge/Backend-None_Required-red?style=for-the-badge)]()
+[![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-8400+-orange?style=for-the-badge)]()
+[![No Backend](https://img.shields.io/badge/Backend-None%20Required-red?style=for-the-badge)]()
 
 </div>
 
