@@ -1950,7 +1950,7 @@
         
         // ===== Grade Tracker =====
         grades: {
-            semesters: [] // { id, name, courses: [{ id, subjectId, creditHours, assessments: [{ id, name, type, weight, score, maxScore }], gradingScale }] }
+            semesters: [] // { id, name, courses: [{ id, name, creditHours, assessments: [{ id, name, type, componentWeight, weight, score, maxScore }] }] }
         },
         
         // ===== Notifications =====
@@ -2068,7 +2068,10 @@
         
         // Grades
         ADD_SEMESTER: 'ADD_SEMESTER',
+        DELETE_SEMESTER: 'DELETE_SEMESTER',
         ADD_COURSE: 'ADD_COURSE',
+        UPDATE_COURSE: 'UPDATE_COURSE',
+        DELETE_COURSE: 'DELETE_COURSE',
         ADD_ASSESSMENT: 'ADD_ASSESSMENT',
         UPDATE_ASSESSMENT: 'UPDATE_ASSESSMENT',
         DELETE_ASSESSMENT: 'DELETE_ASSESSMENT',
@@ -2745,6 +2748,16 @@
                 };
             }
             
+            case ActionTypes.DELETE_SEMESTER: {
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).filter(sem => sem.id !== payload)
+                    }
+                };
+            }
+            
             case ActionTypes.ADD_COURSE: {
                 const { semesterId, course } = payload;
                 return {
@@ -2754,6 +2767,41 @@
                         semesters: (state.grades?.semesters || []).map(sem =>
                             sem.id === semesterId
                                 ? { ...sem, courses: [...(sem.courses || []), course] }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.UPDATE_COURSE: {
+                const { semesterId: uSemId, courseId: uCourseId, updates: courseUpdates } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === uSemId
+                                ? {
+                                    ...sem,
+                                    courses: (sem.courses || []).map(c =>
+                                        c.id === uCourseId ? { ...c, ...courseUpdates } : c
+                                    )
+                                }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.DELETE_COURSE: {
+                const { semesterId: dcSemId, courseId: dcCourseId } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === dcSemId
+                                ? { ...sem, courses: (sem.courses || []).filter(c => c.id !== dcCourseId) }
                                 : sem
                         )
                     }
@@ -2773,6 +2821,28 @@
                                     courses: (sem.courses || []).map(c =>
                                         c.id === courseId
                                             ? { ...c, assessments: [...(c.assessments || []), assessment] }
+                                            : c
+                                    )
+                                }
+                                : sem
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.UPDATE_ASSESSMENT: {
+                const { semesterId: uaSemId, courseId: uaCourseId, assessmentId: uaAssId, updates: aUpdates } = payload;
+                return {
+                    ...state,
+                    grades: {
+                        ...state.grades,
+                        semesters: (state.grades?.semesters || []).map(sem =>
+                            sem.id === uaSemId
+                                ? {
+                                    ...sem,
+                                    courses: (sem.courses || []).map(c =>
+                                        c.id === uaCourseId
+                                            ? { ...c, assessments: (c.assessments || []).map(a => a.id === uaAssId ? { ...a, ...aUpdates } : a) }
                                             : c
                                     )
                                 }
@@ -4008,6 +4078,7 @@
         const [timeElapsed, setTimeElapsed] = useState(0);
         const [isRunning, setIsRunning] = useState(false);
         const [showSubjectManager, setShowSubjectManager] = useState(false);
+        const pomodoroDuration = (state.settings.pomodoroStudy || 25) * 60;
         
         // Update selected subject when subjects list changes (e.g. after adding a new subject)
         useEffect(() => {
@@ -4020,7 +4091,22 @@
             let interval;
             if (isRunning) {
                 interval = setInterval(() => {
-                    setTimeElapsed(prev => prev + 1);
+                    if (timerMode === 'pomodoro') {
+                        setTimeElapsed(prev => {
+                            if (prev <= 1) {
+                                setIsRunning(false);
+                                if (state.activeStudySession) {
+                                    dispatch({ type: ActionTypes.END_STUDY_SESSION });
+                                    showToast(`Pomodoro complete! +${Math.floor(pomodoroDuration / 60 / 5) * 2} XP`, 'success');
+                                }
+                                setTimeout(() => onClose(), 500);
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    } else {
+                        setTimeElapsed(prev => prev + 1);
+                    }
                 }, 1000);
             }
             return () => clearInterval(interval);
@@ -4030,6 +4116,11 @@
             if (!selectedSubject) {
                 showToast('Please add a subject first in Settings', 'error');
                 return;
+            }
+            if (timerMode === 'pomodoro') {
+                setTimeElapsed(pomodoroDuration);
+            } else {
+                setTimeElapsed(0);
             }
             if (!state.activeStudySession) {
                 dispatch({
@@ -4044,7 +4135,8 @@
             setIsRunning(false);
             if (state.activeStudySession) {
                 dispatch({ type: ActionTypes.END_STUDY_SESSION });
-                showToast(`Study session saved! +${Math.floor(timeElapsed / 60 / 5) * 2} XP`, 'success');
+                const actualElapsed = timerMode === 'pomodoro' ? pomodoroDuration - timeElapsed : timeElapsed;
+                showToast(`Study session saved! +${Math.floor(actualElapsed / 60 / 5) * 2} XP`, 'success');
             }
             setTimeElapsed(0);
             onClose();
@@ -4091,7 +4183,7 @@
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Mode</label>
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => setTimerMode('regular')}
+                                        onClick={() => { setTimerMode('regular'); setTimeElapsed(0); }}
                                         className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
                                             timerMode === 'regular' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
                                         }`}
@@ -4099,7 +4191,7 @@
                                         Regular
                                     </button>
                                     <button
-                                        onClick={() => setTimerMode('pomodoro')}
+                                        onClick={() => { setTimerMode('pomodoro'); setTimeElapsed(pomodoroDuration); }}
                                         className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
                                             timerMode === 'pomodoro' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
                                         }`}
@@ -6212,6 +6304,7 @@
         const today = DateUtils.toKey();
         const todayEntry = state.journalEntries.find(e => e.date === today);
         const [showJournalModal, setShowJournalModal] = useState(false);
+        const [viewingEntry, setViewingEntry] = useState(null);
         const [showWellnessModal, setShowWellnessModal] = useState(null); // 'sleep', 'water', 'exercise', 'mood'
         
         // Calculate wellness stats
@@ -6363,7 +6456,7 @@
                                                 <div className="text-xs text-slate-400">{entry.wordCount} words</div>
                                             </div>
                                         </div>
-                                        <button className="text-xs text-indigo-400 hover:text-indigo-300">View</button>
+                                        <button onClick={() => setViewingEntry(entry)} aria-label={`View journal entry from ${entry.date}`} className="text-xs text-indigo-400 hover:text-indigo-300">View</button>
                                     </div>
                                 ))}
                         </div>
@@ -6381,6 +6474,12 @@
                     <WellnessModal
                         type={showWellnessModal}
                         onClose={() => setShowWellnessModal(null)}
+                    />
+                )}
+                {viewingEntry && (
+                    <JournalEntryModal
+                        entry={viewingEntry}
+                        onClose={() => setViewingEntry(null)}
                     />
                 )}
             </div>
@@ -7481,33 +7580,97 @@
     const GradeTrackerView = memo(() => {
         const { state, dispatch } = useApp();
         const [showAddSemester, setShowAddSemester] = useState(false);
-        const [showAddCourse, setShowAddCourse] = useState(null);
-        const [showAddAssessment, setShowAddAssessment] = useState(null);
         const [semesterName, setSemesterName] = useState('');
+        const [expandedSemester, setExpandedSemester] = useState(null);
+        const [expandedCourse, setExpandedCourse] = useState(null);
+        const [showAddCourse, setShowAddCourse] = useState(null);
         const [courseName, setCourseName] = useState('');
         const [courseCredits, setCourseCredits] = useState(3);
-        const [assessmentData, setAssessmentData] = useState({ name: '', type: 'Assignment', weight: 10, score: 0, maxScore: 100 });
+        const [showAddComponent, setShowAddComponent] = useState(null);
+        const [customComponentName, setCustomComponentName] = useState('');
+        const [entryModal, setEntryModal] = useState(null); // { semId, courseId, componentType, weight }
+        const [entryScore, setEntryScore] = useState('');
+        const [entryMaxScore, setEntryMaxScore] = useState('100');
         
         const semesters = state.grades?.semesters || [];
         
-        const calcCourseGPA = (course) => {
+        const DEFAULT_COMPONENTS = [
+            { type: 'Class Test', label: 'Class Tests', icon: '📝', multiple: true, maxEntries: 2 },
+            { type: 'Assignment', label: 'Assignments', icon: '📋', multiple: true, maxEntries: 2 },
+            { type: 'Mid Semester', label: 'Mid Semester', icon: '📖', multiple: false, maxEntries: 1 },
+            { type: 'End Semester', label: 'End Semester', icon: '🎓', multiple: false, maxEntries: 1 },
+            { type: 'Attendance', label: 'Attendance', icon: '📅', multiple: false, maxEntries: 1 },
+        ];
+        
+        const getLetterGrade = (pct) => {
+            if (pct >= 90) return { grade: 'Excellent', color: 'text-emerald-400' };
+            if (pct >= 80) return { grade: 'A', color: 'text-emerald-400' };
+            if (pct >= 70) return { grade: 'B', color: 'text-blue-400' };
+            if (pct >= 60) return { grade: 'C', color: 'text-amber-400' };
+            if (pct >= 50) return { grade: 'D', color: 'text-orange-400' };
+            if (pct >= 40) return { grade: 'Pass', color: 'text-orange-500' };
+            return { grade: 'Fail', color: 'text-rose-400' };
+        };
+        
+        // Migrate old assessments to component-based structure for backward compat
+        const getComponents = (course) => {
             const assessments = course.assessments || [];
-            if (assessments.length === 0) return null;
-            const totalWeight = assessments.reduce((s, a) => s + a.weight, 0);
+            if (assessments.length === 0) return [];
+            // Group assessments by type (component)
+            const groups = {};
+            assessments.forEach(a => {
+                const type = a.type || 'Other';
+                if (!groups[type]) groups[type] = { type, entries: [], weight: 0 };
+                groups[type].entries.push(a);
+                // Use the weight from any entry (they should all share the same component weight)
+                if (a.componentWeight !== undefined) {
+                    groups[type].weight = a.componentWeight;
+                } else {
+                    // Legacy: sum individual weights
+                    groups[type].weight += (a.weight || 0);
+                }
+            });
+            return Object.values(groups);
+        };
+        
+        const getTotalWeight = (course) => {
+            const components = getComponents(course);
+            return components.reduce((sum, comp) => sum + (comp.weight || 0), 0);
+        };
+        
+        const calcCoursePercentage = (course) => {
+            const components = getComponents(course);
+            if (components.length === 0) return null;
+            const totalWeight = components.reduce((s, comp) => s + comp.weight, 0);
             if (totalWeight === 0) return null;
-            const weightedScore = assessments.reduce((s, a) => s + (a.score / a.maxScore) * a.weight, 0);
-            const pct = (weightedScore / totalWeight) * 100;
-            if (pct >= 93) return 4.0;
-            if (pct >= 90) return 3.7;
-            if (pct >= 87) return 3.3;
-            if (pct >= 83) return 3.0;
-            if (pct >= 80) return 2.7;
-            if (pct >= 77) return 2.3;
-            if (pct >= 73) return 2.0;
-            if (pct >= 70) return 1.7;
-            if (pct >= 67) return 1.3;
-            if (pct >= 60) return 1.0;
-            return 0.0;
+            let weightedScore = 0;
+            let hasAnyScore = false;
+            components.forEach(comp => {
+                const entries = comp.entries || [];
+                const scored = entries.filter(e => e.score !== undefined && e.score !== null && e.maxScore > 0);
+                if (scored.length > 0) {
+                    hasAnyScore = true;
+                    // Each entry gets equal share of the component weight
+                    const perEntryWeight = comp.weight / entries.length;
+                    scored.forEach(e => {
+                        weightedScore += (e.score / e.maxScore) * perEntryWeight;
+                    });
+                }
+            });
+            if (!hasAnyScore) return null;
+            return weightedScore;
+        };
+        
+        const calcCourseGPA = (course) => {
+            const pct = calcCoursePercentage(course);
+            if (pct === null) return null;
+            if (pct >= 90) return 10;
+            if (pct >= 80) return 9;
+            if (pct >= 70) return 8;
+            if (pct >= 60) return 7;
+            if (pct >= 50) return 6;
+            if (pct >= 40) return 5;
+            return 0;
         };
         
         const calcSemesterGPA = (semester) => {
@@ -7539,28 +7702,186 @@
         
         const handleAddSemester = () => {
             if (!semesterName.trim()) return;
-            dispatch({ type: ActionTypes.ADD_SEMESTER, payload: { id: crypto.randomUUID(), name: semesterName.trim(), courses: [] } });
+            const newId = crypto.randomUUID();
+            dispatch({ type: ActionTypes.ADD_SEMESTER, payload: { id: newId, name: semesterName.trim(), courses: [] } });
             setSemesterName(''); setShowAddSemester(false);
+            setExpandedSemester(newId);
             showToast('Semester added', 'success');
+        };
+        
+        const handleDeleteSemester = (semId) => {
+            if (confirm('Delete this semester and all its courses?')) {
+                dispatch({ type: ActionTypes.DELETE_SEMESTER, payload: semId });
+                if (expandedSemester === semId) setExpandedSemester(null);
+                showToast('Semester deleted', 'success');
+            }
         };
         
         const handleAddCourse = (semId) => {
             if (!courseName.trim()) return;
-            dispatch({ type: ActionTypes.ADD_COURSE, payload: { semesterId: semId, course: { id: crypto.randomUUID(), name: courseName.trim(), creditHours: courseCredits, assessments: [] } } });
+            const newId = crypto.randomUUID();
+            dispatch({ type: ActionTypes.ADD_COURSE, payload: { semesterId: semId, course: { id: newId, name: courseName.trim(), creditHours: courseCredits, assessments: [] } } });
             setCourseName(''); setCourseCredits(3); setShowAddCourse(null);
+            setExpandedCourse(newId);
             showToast('Course added', 'success');
         };
         
-        const handleAddAssessment = (semId, courseId) => {
-            if (!assessmentData.name.trim()) return;
+        const handleDeleteCourse = (semId, courseId) => {
+            if (confirm('Delete this course and all its components?')) {
+                dispatch({ type: ActionTypes.DELETE_COURSE, payload: { semesterId: semId, courseId } });
+                if (expandedCourse === courseId) setExpandedCourse(null);
+                showToast('Course deleted', 'success');
+            }
+        };
+        
+        const handleAddComponentEntry = (semId, courseId, componentType, componentWeight) => {
+            setEntryModal({ semId, courseId, componentType, weight: componentWeight });
+            setEntryScore('');
+            setEntryMaxScore('100');
+        };
+        
+        const handleSubmitEntry = () => {
+            if (!entryModal) return;
+            const { semId, courseId, componentType, weight } = entryModal;
+            const score = Number(entryScore);
+            const maxScore = Number(entryMaxScore);
+            if (isNaN(score) || score < 0 || isNaN(maxScore) || maxScore < 1) {
+                showToast('Please enter valid marks', 'error');
+                return;
+            }
+            const course = semesters.find(s => s.id === semId)?.courses?.find(c => c.id === courseId);
+            if (!course) return;
+            const existing = (course.assessments || []).filter(a => a.type === componentType);
+            const entryNum = existing.length + 1;
             dispatch({
                 type: ActionTypes.ADD_ASSESSMENT,
-                payload: { semesterId: semId, courseId, assessment: { id: crypto.randomUUID(), ...assessmentData } }
+                payload: {
+                    semesterId: semId,
+                    courseId,
+                    assessment: {
+                        id: crypto.randomUUID(),
+                        name: `${componentType} ${entryNum}`,
+                        type: componentType,
+                        componentWeight: weight,
+                        weight: weight,
+                        score,
+                        maxScore,
+                    }
+                }
             });
-            dispatch({ type: ActionTypes.ADD_XP, payload: { amount: 5 } });
-            setAssessmentData({ name: '', type: 'Assignment', weight: 10, score: 0, maxScore: 100 });
-            setShowAddAssessment(null);
-            showToast('Assessment logged +5 XP', 'success');
+            setEntryModal(null);
+            showToast('Marks saved', 'success');
+        };
+        
+        const handleAddCustomComponent = (semId, courseId) => {
+            if (!customComponentName.trim()) return;
+            const cName = customComponentName.trim();
+            dispatch({
+                type: ActionTypes.ADD_ASSESSMENT,
+                payload: {
+                    semesterId: semId,
+                    courseId,
+                    assessment: {
+                        id: crypto.randomUUID(),
+                        name: `${cName} 1`,
+                        type: cName,
+                        componentWeight: 0,
+                        weight: 0,
+                        score: 0,
+                        maxScore: 100,
+                    }
+                }
+            });
+            setCustomComponentName('');
+            setShowAddComponent(null);
+            showToast('Custom component added', 'success');
+        };
+        
+        const handleUpdateEntry = (semId, courseId, assessmentId, updates) => {
+            dispatch({
+                type: ActionTypes.UPDATE_ASSESSMENT,
+                payload: { semesterId: semId, courseId, assessmentId, updates }
+            });
+        };
+        
+        const handleUpdateComponentWeight = (semId, courseId, componentType, newWeight) => {
+            const course = semesters.find(s => s.id === semId)?.courses?.find(c => c.id === courseId);
+            if (!course) return;
+            (course.assessments || []).filter(a => a.type === componentType).forEach(a => {
+                dispatch({
+                    type: ActionTypes.UPDATE_ASSESSMENT,
+                    payload: { semesterId: semId, courseId, assessmentId: a.id, updates: { componentWeight: newWeight, weight: newWeight } }
+                });
+            });
+        };
+        
+        const handleDeleteEntry = (semId, courseId, assessmentId) => {
+            dispatch({ type: ActionTypes.DELETE_ASSESSMENT, payload: { semesterId: semId, courseId, assessmentId } });
+        };
+        
+        // Component for rendering a single course's component (e.g., Class Tests)
+        const ComponentSection = ({ semId, courseId, componentType, entries, weight, totalWeightUsed, isCustom }) => {
+            const info = DEFAULT_COMPONENTS.find(d => d.type === componentType);
+            const icon = info?.icon || '📌';
+            const label = info?.label || componentType;
+            const maxEntries = info?.maxEntries || 5;
+            const canAddMore = entries.length < maxEntries;
+            
+            return (
+                <div className="bg-slate-800/60 rounded-lg p-3 space-y-2 border border-slate-700/50">
+                    <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-2">
+                            <span className="text-sm">{icon}</span>
+                            <span className="text-sm font-medium text-white">{label}</span>
+                        </div>
+                        <div className="flex items-center gap-2">
+                            <div className="flex items-center gap-1">
+                                <input
+                                    type="number"
+                                    value={weight}
+                                    onChange={e => {
+                                        const val = Math.max(0, Math.min(100, Number(e.target.value)));
+                                        handleUpdateComponentWeight(semId, courseId, componentType, val);
+                                    }}
+                                    className="w-14 px-1 py-0.5 bg-slate-700 rounded text-white text-xs text-center border border-slate-600"
+                                    min="0" max="100"
+                                />
+                                <span className="text-xs text-slate-400">%</span>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    {/* Entry summary rows - clean display with delete */}
+                    {entries.length > 0 && (
+                        <div className="space-y-1">
+                            {entries.map(entry => {
+                                const pctVal = entry.maxScore > 0 ? (entry.score / entry.maxScore) : 0;
+                                const perEntryWeight = weight / entries.length;
+                                const contributed = (pctVal * perEntryWeight).toFixed(1);
+                                return (
+                                    <div key={entry.id} className="flex items-center justify-between py-1.5 px-2 bg-slate-900/40 rounded">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xs text-slate-300 font-medium">{entry.name}</span>
+                                            <span className="text-xs text-white">{entry.score}/{entry.maxScore}</span>
+                                            <span className="text-xs text-indigo-400 font-medium">→ {contributed}/{perEntryWeight.toFixed(1)}</span>
+                                        </div>
+                                        <button onClick={() => handleDeleteEntry(semId, courseId, entry.id)} className="text-rose-400 hover:text-rose-300 text-xs p-1" aria-label="Delete entry">✕</button>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    )}
+                    
+                    {canAddMore && (
+                        <button
+                            onClick={() => handleAddComponentEntry(semId, courseId, componentType, weight)}
+                            className="w-full py-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600"
+                        >
+                            + Add {componentType} Marks
+                        </button>
+                    )}
+                </div>
+            );
         };
         
         return (
@@ -7568,10 +7889,10 @@
                 <div className="flex items-center justify-between">
                     <div>
                         <h2 className="text-2xl font-bold text-white mb-1">📈 Grade Tracker</h2>
-                        <p className="text-slate-400 text-sm">Track your courses, assessments, and GPA</p>
+                        <p className="text-slate-400 text-sm">Track courses, components & weighted grades</p>
                     </div>
                     <div className="text-right">
-                        <div className="text-xs text-slate-400">CGPA</div>
+                        <div className="text-xs text-slate-400">CGPA (out of 10)</div>
                         <div className="text-2xl font-bold text-indigo-400">{calcCGPA()}</div>
                     </div>
                 </div>
@@ -7583,10 +7904,11 @@
                 {showAddSemester && (
                     <div className="p-4 bg-slate-800/50 rounded-xl border border-slate-700 space-y-3">
                         <input type="text" value={semesterName} onChange={e => setSemesterName(e.target.value)} placeholder="Semester name (e.g., Fall 2026)"
-                            className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                            className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm"
+                            onKeyDown={e => e.key === 'Enter' && handleAddSemester()} />
                         <div className="flex gap-2">
                             <button onClick={handleAddSemester} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Add</button>
-                            <button onClick={() => setShowAddSemester(false)} className="flex-1 py-2 bg-slate-700 rounded-lg text-slate-300 text-sm">Cancel</button>
+                            <button onClick={() => { setShowAddSemester(false); setSemesterName(''); }} className="flex-1 py-2 bg-slate-700 rounded-lg text-slate-300 text-sm">Cancel</button>
                         </div>
                     </div>
                 )}
@@ -7598,93 +7920,261 @@
                         <p className="text-sm">Add a semester to start tracking your grades</p>
                     </div>
                 ) : (
-                    semesters.map(sem => (
-                        <div key={sem.id} className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
-                            <div className="flex items-center justify-between">
-                                <h3 className="font-bold text-white">{sem.name}</h3>
-                                <span className="text-sm text-indigo-400 font-medium">GPA: {calcSemesterGPA(sem)}</span>
-                            </div>
-                            
-                            {(sem.courses || []).map(course => {
-                                const gpa = calcCourseGPA(course);
-                                return (
-                                    <div key={course.id} className="bg-slate-900/50 rounded-lg p-3 space-y-2">
-                                        <div className="flex items-center justify-between">
-                                            <div>
-                                                <span className="font-medium text-white text-sm">{course.name}</span>
-                                                <span className="ml-2 text-xs text-slate-400">{course.creditHours} credits</span>
-                                            </div>
-                                            <span className="text-sm font-medium text-emerald-400">{gpa !== null ? gpa.toFixed(1) : '-'}</span>
+                    semesters.map(sem => {
+                        const isExpanded = expandedSemester === sem.id;
+                        return (
+                            <div key={sem.id} className="bg-slate-800/50 rounded-xl border border-slate-700 overflow-hidden">
+                                <button
+                                    onClick={() => setExpandedSemester(isExpanded ? null : sem.id)}
+                                    className="w-full p-4 flex items-center justify-between hover:bg-slate-800/80 transition-colors"
+                                >
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-lg">{isExpanded ? '▼' : '▶'}</span>
+                                        <div className="text-left">
+                                            <h3 className="font-bold text-white">{sem.name}</h3>
+                                            <span className="text-xs text-slate-400">{(sem.courses || []).length} course(s)</span>
                                         </div>
+                                    </div>
+                                    <div className="flex items-center gap-3">
+                                        <span className="text-sm text-indigo-400 font-medium">GPA: {calcSemesterGPA(sem)}/10</span>
+                                        <button onClick={e => { e.stopPropagation(); handleDeleteSemester(sem.id); }}
+                                            className="text-rose-400 hover:text-rose-300 text-sm p-1" aria-label="Delete semester">🗑️</button>
+                                    </div>
+                                </button>
+                                
+                                {isExpanded && (
+                                    <div className="p-4 pt-0 space-y-3">
+                                        {(sem.courses || []).map(course => {
+                                            const gpa = calcCourseGPA(course);
+                                            const pct = calcCoursePercentage(course);
+                                            const isOpen = expandedCourse === course.id;
+                                            const components = getComponents(course);
+                                            const totalWeight = getTotalWeight(course);
+                                            const weightValid = totalWeight === 100;
+                                            const weightOver = totalWeight > 100;
+                                            const availableDefaults = DEFAULT_COMPONENTS.filter(d => {
+                                                const comp = components.find(c => c.type === d.type);
+                                                if (!comp) return true;
+                                                return comp.entries.length < d.maxEntries;
+                                            });
+                                            
+                                            return (
+                                                <div key={course.id} className="bg-slate-900/50 rounded-xl border border-slate-700/50 overflow-hidden">
+                                                    <button
+                                                        onClick={() => setExpandedCourse(isOpen ? null : course.id)}
+                                                        className="w-full p-3 flex items-center justify-between hover:bg-slate-800/50 transition-colors"
+                                                    >
+                                                        <div className="flex items-center gap-2">
+                                                            <span className="text-sm">{isOpen ? '▼' : '▶'}</span>
+                                                            <span className="font-medium text-white text-sm">{course.name}</span>
+                                                            <span className="text-xs text-slate-400">({course.creditHours} cr)</span>
+                                                        </div>
+                                                        <div className="flex items-center gap-3">
+                                                            {pct !== null && (
+                                                                <span className={`text-xs font-medium ${getLetterGrade(pct).color}`}>
+                                                                    {pct.toFixed(1)}% — {getLetterGrade(pct).grade}
+                                                                </span>
+                                                            )}
+                                                            <button onClick={e => { e.stopPropagation(); handleDeleteCourse(sem.id, course.id); }}
+                                                                className="text-rose-400 hover:text-rose-300 text-xs p-1" aria-label="Delete course">✕</button>
+                                                        </div>
+                                                    </button>
+                                                    
+                                                    {isOpen && (
+                                                        <div className="p-3 pt-0 space-y-3">
+                                                            {/* Weightage bar */}
+                                                            <div className="space-y-1">
+                                                                <div className="flex items-center justify-between text-xs">
+                                                                    <span className={`font-medium ${weightValid ? 'text-emerald-400' : weightOver ? 'text-rose-400' : 'text-amber-400'}`}>
+                                                                        Total Weightage: {totalWeight}%
+                                                                    </span>
+                                                                    <span className="text-slate-400">
+                                                                        {weightValid ? '✅ Valid' : weightOver ? '⚠️ Over 100%' : `${100 - totalWeight}% remaining`}
+                                                                    </span>
+                                                                </div>
+                                                                <div className="h-2 bg-slate-700 rounded-full overflow-hidden">
+                                                                    <div
+                                                                        className={`h-full rounded-full transition-all ${weightValid ? 'bg-emerald-500' : weightOver ? 'bg-rose-500' : 'bg-amber-500'}`}
+                                                                        style={{ width: `${Math.min(100, totalWeight)}%` }}
+                                                                    ></div>
+                                                                </div>
+                                                            </div>
+                                                            
+                                                            {/* Component sections */}
+                                                            {components.map(comp => (
+                                                                <ComponentSection
+                                                                    key={comp.type}
+                                                                    semId={sem.id}
+                                                                    courseId={course.id}
+                                                                    componentType={comp.type}
+                                                                    entries={comp.entries}
+                                                                    weight={comp.weight}
+                                                                    totalWeightUsed={totalWeight}
+                                                                />
+                                                            ))}
+                                                            
+                                                            {/* Contribution breakdown */}
+                                                            {components.length > 0 && pct !== null && (() => {
+                                                                const letterGrade = getLetterGrade(pct);
+                                                                let totalContrib = 0;
+                                                                return (
+                                                                    <div className="bg-slate-800/80 rounded-lg p-3 space-y-1.5">
+                                                                        <div className="flex items-center justify-between mb-1">
+                                                                            <div className="text-xs font-medium text-slate-300">Contribution Breakdown (out of 100)</div>
+                                                                            <span className={`text-xs font-bold ${letterGrade.color}`}>{letterGrade.grade}</span>
+                                                                        </div>
+                                                                        {components.map(comp => {
+                                                                            const scored = comp.entries.filter(e => e.score !== undefined && e.maxScore > 0);
+                                                                            if (scored.length === 0) return null;
+                                                                            return scored.map((entry, idx) => {
+                                                                                const entryPct = entry.score / entry.maxScore;
+                                                                                const perEntryWeight = comp.weight / comp.entries.length;
+                                                                                const contrib = entryPct * perEntryWeight;
+                                                                                totalContrib += contrib;
+                                                                                return (
+                                                                                    <div key={entry.id} className="flex items-center justify-between text-xs">
+                                                                                        <span className="text-slate-400">{entry.name} ({entry.score}/{entry.maxScore})</span>
+                                                                                        <span className="text-white font-medium">{contrib.toFixed(1)} / {perEntryWeight.toFixed(1)}</span>
+                                                                                    </div>
+                                                                                );
+                                                                            });
+                                                                        })}
+                                                                        <div className="border-t border-slate-700 pt-1.5 mt-1">
+                                                                            <div className="flex items-center justify-between text-sm font-bold">
+                                                                                <span className="text-slate-300">Total</span>
+                                                                                <span className={letterGrade.color}>{pct.toFixed(1)} / 100 — {letterGrade.grade}</span>
+                                                                            </div>
+                                                                        </div>
+                                                                    </div>
+                                                                );
+                                                            })()}
+                                                            
+                                                            {/* Add component buttons */}
+                                                            <div className="space-y-2">
+                                                                {availableDefaults.length > 0 && (
+                                                                    <div className="flex flex-wrap gap-1.5">
+                                                                        {availableDefaults.map(def => (
+                                                                            <button
+                                                                                key={def.type}
+                                                                                onClick={() => handleAddComponentEntry(sem.id, course.id, def.type, 0)}
+                                                                                className="px-2 py-1 text-xs bg-slate-800 hover:bg-slate-700 text-slate-300 rounded-lg border border-slate-600 transition-colors"
+                                                                            >
+                                                                                {def.icon} + {def.label}
+                                                                            </button>
+                                                                        ))}
+                                                                    </div>
+                                                                )}
+                                                                
+                                                                {showAddComponent === course.id ? (
+                                                                    <div className="flex gap-2 items-center">
+                                                                        <input
+                                                                            type="text"
+                                                                            value={customComponentName}
+                                                                            onChange={e => setCustomComponentName(e.target.value)}
+                                                                            placeholder="Custom component name"
+                                                                            className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600"
+                                                                            onKeyDown={e => e.key === 'Enter' && handleAddCustomComponent(sem.id, course.id)}
+                                                                        />
+                                                                        <button onClick={() => handleAddCustomComponent(sem.id, course.id)} className="px-2 py-1 bg-indigo-500 rounded text-white text-xs">Add</button>
+                                                                        <button onClick={() => { setShowAddComponent(null); setCustomComponentName(''); }} className="px-2 py-1 bg-slate-700 rounded text-slate-300 text-xs">Cancel</button>
+                                                                    </div>
+                                                                ) : (
+                                                                    <button
+                                                                        onClick={() => setShowAddComponent(course.id)}
+                                                                        className="w-full py-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600"
+                                                                    >
+                                                                        + Add Custom Component
+                                                                    </button>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            );
+                                        })}
                                         
-                                        {(course.assessments || []).map(a => (
-                                            <div key={a.id} className="flex items-center justify-between text-xs text-slate-400 pl-2">
-                                                <span>{a.name} ({a.type}, {a.weight}%)</span>
+                                        {/* Add Course */}
+                                        {showAddCourse === sem.id ? (
+                                            <div className="space-y-2 p-3 bg-slate-900/50 rounded-lg border border-slate-700/50">
+                                                <input type="text" value={courseName} onChange={e => setCourseName(e.target.value)} placeholder="Course name"
+                                                    className="w-full px-2 py-1.5 bg-slate-800 rounded text-white text-sm border border-slate-600"
+                                                    onKeyDown={e => e.key === 'Enter' && handleAddCourse(sem.id)} />
                                                 <div className="flex items-center gap-2">
-                                                    <span className="text-white">{a.score}/{a.maxScore}</span>
-                                                    <button onClick={() => {
-                                                        if (confirm('Delete this assessment?')) {
-                                                            dispatch({ type: ActionTypes.DELETE_ASSESSMENT, payload: { semesterId: sem.id, courseId: course.id, assessmentId: a.id } });
-                                                        }
-                                                    }} className="text-rose-400 hover:text-rose-300" aria-label="Delete assessment">✕</button>
-                                                </div>
-                                            </div>
-                                        ))}
-                                        
-                                        {showAddAssessment === course.id ? (
-                                            <div className="space-y-2 p-2 bg-slate-800 rounded-lg">
-                                                <input type="text" value={assessmentData.name} onChange={e => setAssessmentData(p => ({...p, name: e.target.value}))}
-                                                    placeholder="Assessment name" className="w-full px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
-                                                <div className="flex gap-2">
-                                                    <select value={assessmentData.type} onChange={e => setAssessmentData(p => ({...p, type: e.target.value}))}
-                                                        className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600">
-                                                        {['Quiz','Assignment','Midterm','Final','Project','Lab','Participation'].map(t => <option key={t} value={t}>{t}</option>)}
-                                                    </select>
-                                                    <input type="number" value={assessmentData.weight} onChange={e => setAssessmentData(p => ({...p, weight: Math.max(0, Math.min(100, Number(e.target.value)))}))}
-                                                        placeholder="Weight %" min="0" max="100" className="w-16 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
+                                                    <label className="text-xs text-slate-400">Credits:</label>
+                                                    <input type="number" value={courseCredits} onChange={e => setCourseCredits(Math.max(1, Math.min(10, Number(e.target.value))))}
+                                                        min="1" max="10" className="w-16 px-2 py-1 bg-slate-800 rounded text-white text-xs border border-slate-600" />
                                                 </div>
                                                 <div className="flex gap-2">
-                                                    <input type="number" value={assessmentData.score} onChange={e => setAssessmentData(p => ({...p, score: Math.max(0, Number(e.target.value))}))}
-                                                        placeholder="Score" min="0" className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
-                                                    <span className="text-slate-400 text-xs self-center">/</span>
-                                                    <input type="number" value={assessmentData.maxScore} onChange={e => setAssessmentData(p => ({...p, maxScore: Math.max(1, Number(e.target.value))}))}
-                                                        placeholder="Max" min="1" className="flex-1 px-2 py-1 bg-slate-700 rounded text-white text-xs border border-slate-600" />
-                                                </div>
-                                                <div className="flex gap-2">
-                                                    <button onClick={() => handleAddAssessment(sem.id, course.id)} className="flex-1 py-1 bg-indigo-500 rounded text-white text-xs">Add</button>
-                                                    <button onClick={() => setShowAddAssessment(null)} className="flex-1 py-1 bg-slate-700 rounded text-slate-300 text-xs">Cancel</button>
+                                                    <button onClick={() => handleAddCourse(sem.id)} className="flex-1 py-1.5 bg-indigo-500 rounded text-white text-sm font-medium">Add Course</button>
+                                                    <button onClick={() => { setShowAddCourse(null); setCourseName(''); }} className="flex-1 py-1.5 bg-slate-700 rounded text-slate-300 text-sm">Cancel</button>
                                                 </div>
                                             </div>
                                         ) : (
-                                            <button onClick={() => setShowAddAssessment(course.id)} className="w-full py-1 text-indigo-400 text-xs hover:bg-indigo-500/10 rounded">
-                                                + Add Assessment
+                                            <button onClick={() => setShowAddCourse(sem.id)} className="w-full py-2 text-indigo-400 text-sm hover:bg-indigo-500/10 rounded-lg border border-dashed border-slate-700">
+                                                + Add Course
                                             </button>
                                         )}
                                     </div>
-                                );
-                            })}
+                                )}
+                            </div>
+                        );
+                    })
+                )}
+                
+                {/* Entry Marks Modal */}
+                {entryModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEntryModal(null)}>
+                        <div className="w-full max-w-sm mx-4 bg-slate-900 rounded-2xl p-6 border border-slate-700" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold text-white mb-1">Enter Marks</h3>
+                            <p className="text-sm text-slate-400 mb-4">{entryModal.componentType}</p>
                             
-                            {showAddCourse === sem.id ? (
-                                <div className="space-y-2 p-3 bg-slate-900/50 rounded-lg">
-                                    <input type="text" value={courseName} onChange={e => setCourseName(e.target.value)} placeholder="Course name"
-                                        className="w-full px-2 py-1 bg-slate-800 rounded text-white text-sm border border-slate-600" />
-                                    <div className="flex items-center gap-2">
-                                        <label className="text-xs text-slate-400">Credits:</label>
-                                        <input type="number" value={courseCredits} onChange={e => setCourseCredits(Math.max(1, Math.min(10, Number(e.target.value))))}
-                                            min="1" max="10" className="w-16 px-2 py-1 bg-slate-800 rounded text-white text-xs border border-slate-600" />
-                                    </div>
-                                    <div className="flex gap-2">
-                                        <button onClick={() => handleAddCourse(sem.id)} className="flex-1 py-1 bg-indigo-500 rounded text-white text-sm">Add Course</button>
-                                        <button onClick={() => setShowAddCourse(null)} className="flex-1 py-1 bg-slate-700 rounded text-slate-300 text-sm">Cancel</button>
-                                    </div>
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Marks Obtained</label>
+                                    <input
+                                        type="number"
+                                        value={entryScore}
+                                        onChange={e => setEntryScore(e.target.value)}
+                                        placeholder="e.g. 35"
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-lg"
+                                        min="0"
+                                        autoFocus
+                                    />
                                 </div>
-                            ) : (
-                                <button onClick={() => setShowAddCourse(sem.id)} className="w-full py-2 text-indigo-400 text-sm hover:bg-indigo-500/10 rounded-lg border border-dashed border-slate-700">
-                                    + Add Course
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Maximum Marks</label>
+                                    <input
+                                        type="number"
+                                        value={entryMaxScore}
+                                        onChange={e => setEntryMaxScore(e.target.value)}
+                                        placeholder="e.g. 50"
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-lg"
+                                        min="1"
+                                    />
+                                </div>
+                                {entryScore !== '' && entryMaxScore !== '' && Number(entryMaxScore) > 0 && (
+                                    <div className="text-center py-2 bg-slate-800/50 rounded-lg">
+                                        <span className="text-2xl font-bold text-indigo-400">{((Number(entryScore) / Number(entryMaxScore)) * 100).toFixed(1)}%</span>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    onClick={() => setEntryModal(null)}
+                                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Cancel
                                 </button>
-                            )}
+                                <button
+                                    onClick={handleSubmitEntry}
+                                    className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Save Marks
+                                </button>
+                            </div>
                         </div>
-                    ))
+                    </div>
                 )}
             </div>
         );
