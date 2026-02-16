@@ -4008,6 +4008,7 @@
         const [timeElapsed, setTimeElapsed] = useState(0);
         const [isRunning, setIsRunning] = useState(false);
         const [showSubjectManager, setShowSubjectManager] = useState(false);
+        const pomodoroDuration = (state.settings.pomodoroStudy || 25) * 60;
         
         // Update selected subject when subjects list changes (e.g. after adding a new subject)
         useEffect(() => {
@@ -4020,7 +4021,22 @@
             let interval;
             if (isRunning) {
                 interval = setInterval(() => {
-                    setTimeElapsed(prev => prev + 1);
+                    if (timerMode === 'pomodoro') {
+                        setTimeElapsed(prev => {
+                            if (prev <= 1) {
+                                setIsRunning(false);
+                                if (state.activeStudySession) {
+                                    dispatch({ type: ActionTypes.END_STUDY_SESSION });
+                                    showToast(`Pomodoro complete! +${Math.floor(pomodoroDuration / 60 / 5) * 2} XP`, 'success');
+                                }
+                                setTimeout(() => onClose(), 500);
+                                return 0;
+                            }
+                            return prev - 1;
+                        });
+                    } else {
+                        setTimeElapsed(prev => prev + 1);
+                    }
                 }, 1000);
             }
             return () => clearInterval(interval);
@@ -4030,6 +4046,11 @@
             if (!selectedSubject) {
                 showToast('Please add a subject first in Settings', 'error');
                 return;
+            }
+            if (timerMode === 'pomodoro') {
+                setTimeElapsed(pomodoroDuration);
+            } else {
+                setTimeElapsed(0);
             }
             if (!state.activeStudySession) {
                 dispatch({
@@ -4044,7 +4065,8 @@
             setIsRunning(false);
             if (state.activeStudySession) {
                 dispatch({ type: ActionTypes.END_STUDY_SESSION });
-                showToast(`Study session saved! +${Math.floor(timeElapsed / 60 / 5) * 2} XP`, 'success');
+                const actualElapsed = timerMode === 'pomodoro' ? pomodoroDuration - timeElapsed : timeElapsed;
+                showToast(`Study session saved! +${Math.floor(actualElapsed / 60 / 5) * 2} XP`, 'success');
             }
             setTimeElapsed(0);
             onClose();
@@ -4091,7 +4113,7 @@
                                 <label className="block text-sm font-medium text-slate-300 mb-2">Mode</label>
                                 <div className="flex gap-2">
                                     <button
-                                        onClick={() => setTimerMode('regular')}
+                                        onClick={() => { setTimerMode('regular'); setTimeElapsed(0); }}
                                         className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
                                             timerMode === 'regular' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
                                         }`}
@@ -4099,7 +4121,7 @@
                                         Regular
                                     </button>
                                     <button
-                                        onClick={() => setTimerMode('pomodoro')}
+                                        onClick={() => { setTimerMode('pomodoro'); setTimeElapsed(pomodoroDuration); }}
                                         className={`flex-1 py-2 rounded-lg font-medium transition-colors ${
                                             timerMode === 'pomodoro' ? 'bg-indigo-500 text-white' : 'bg-slate-800 text-slate-400'
                                         }`}
