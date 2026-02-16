@@ -6212,6 +6212,7 @@
         const today = DateUtils.toKey();
         const todayEntry = state.journalEntries.find(e => e.date === today);
         const [showJournalModal, setShowJournalModal] = useState(false);
+        const [viewingEntry, setViewingEntry] = useState(null);
         const [showWellnessModal, setShowWellnessModal] = useState(null); // 'sleep', 'water', 'exercise', 'mood'
         
         // Calculate wellness stats
@@ -6363,7 +6364,7 @@
                                                 <div className="text-xs text-slate-400">{entry.wordCount} words</div>
                                             </div>
                                         </div>
-                                        <button className="text-xs text-indigo-400 hover:text-indigo-300">View</button>
+                                        <button onClick={() => setViewingEntry(entry)} aria-label={`View journal entry from ${entry.date}`} className="text-xs text-indigo-400 hover:text-indigo-300">View</button>
                                     </div>
                                 ))}
                         </div>
@@ -6381,6 +6382,12 @@
                     <WellnessModal
                         type={showWellnessModal}
                         onClose={() => setShowWellnessModal(null)}
+                    />
+                )}
+                {viewingEntry && (
+                    <JournalEntryModal
+                        entry={viewingEntry}
+                        onClose={() => setViewingEntry(null)}
                     />
                 )}
             </div>
