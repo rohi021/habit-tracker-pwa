@@ -7588,6 +7588,9 @@
         const [courseCredits, setCourseCredits] = useState(3);
         const [showAddComponent, setShowAddComponent] = useState(null);
         const [customComponentName, setCustomComponentName] = useState('');
+        const [entryModal, setEntryModal] = useState(null); // { semId, courseId, componentType, weight }
+        const [entryScore, setEntryScore] = useState('');
+        const [entryMaxScore, setEntryMaxScore] = useState('100');
         
         const semesters = state.grades?.semesters || [];
         
@@ -7723,6 +7726,20 @@
         };
         
         const handleAddComponentEntry = (semId, courseId, componentType, componentWeight) => {
+            setEntryModal({ semId, courseId, componentType, weight: componentWeight });
+            setEntryScore('');
+            setEntryMaxScore('100');
+        };
+        
+        const handleSubmitEntry = () => {
+            if (!entryModal) return;
+            const { semId, courseId, componentType, weight } = entryModal;
+            const score = Number(entryScore);
+            const maxScore = Number(entryMaxScore);
+            if (isNaN(score) || score < 0 || isNaN(maxScore) || maxScore < 1) {
+                showToast('Please enter valid marks', 'error');
+                return;
+            }
             const course = semesters.find(s => s.id === semId)?.courses?.find(c => c.id === courseId);
             if (!course) return;
             const existing = (course.assessments || []).filter(a => a.type === componentType);
@@ -7736,14 +7753,15 @@
                         id: crypto.randomUUID(),
                         name: `${componentType} ${entryNum}`,
                         type: componentType,
-                        componentWeight: componentWeight,
-                        weight: componentWeight,
-                        score: 0,
-                        maxScore: 100,
+                        componentWeight: weight,
+                        weight: weight,
+                        score,
+                        maxScore,
                     }
                 }
             });
-            showToast('Entry added', 'success');
+            setEntryModal(null);
+            showToast('Marks saved', 'success');
         };
         
         const handleAddCustomComponent = (semId, courseId) => {
@@ -7838,35 +7856,30 @@
                         </div>
                     )}
                     
-                    {entries.map((entry, idx) => (
-                        <div key={entry.id} className="flex items-center gap-2 pl-2">
-                            <span className="text-xs text-slate-400 w-20 truncate">{entry.name}</span>
-                            <input
-                                type="number"
-                                value={entry.score}
-                                onChange={e => handleUpdateEntry(semId, courseId, entry.id, { score: Math.max(0, Number(e.target.value)) })}
-                                className="w-16 px-1 py-0.5 bg-slate-700 rounded text-white text-xs text-center border border-slate-600"
-                                min="0"
-                            />
-                            <span className="text-xs text-slate-500">/</span>
-                            <input
-                                type="number"
-                                value={entry.maxScore}
-                                onChange={e => handleUpdateEntry(semId, courseId, entry.id, { maxScore: Math.max(1, Number(e.target.value)) })}
-                                className="w-16 px-1 py-0.5 bg-slate-700 rounded text-white text-xs text-center border border-slate-600"
-                                min="1"
-                            />
-                            <span className="text-xs text-slate-400">{entry.maxScore > 0 ? ((entry.score / entry.maxScore) * 100).toFixed(0) + '%' : '-'}</span>
-                            <button onClick={() => handleDeleteEntry(semId, courseId, entry.id)} className="text-rose-400 hover:text-rose-300 text-xs ml-auto" aria-label="Delete entry">✕</button>
+                    {entries.length > 0 && (
+                        <div className="space-y-1">
+                            {entries.map(entry => {
+                                const pctVal = entry.maxScore > 0 ? ((entry.score / entry.maxScore) * 100).toFixed(0) : '0';
+                                return (
+                                    <div key={entry.id} className="flex items-center justify-between py-1 px-2 bg-slate-900/40 rounded">
+                                        <div className="flex items-center gap-2">
+                                            <span className="text-xs text-slate-400">{entry.name}</span>
+                                            <span className="text-xs font-medium text-white">{entry.score}/{entry.maxScore}</span>
+                                            <span className="text-xs text-emerald-400">({pctVal}%)</span>
+                                        </div>
+                                        <button onClick={() => handleDeleteEntry(semId, courseId, entry.id)} className="text-rose-400 hover:text-rose-300 text-xs p-1" aria-label="Delete entry">✕</button>
+                                    </div>
+                                );
+                            })}
                         </div>
-                    ))}
+                    )}
                     
-                    {isMultiple && (
+                    {(isMultiple || entries.length === 0) && (
                         <button
                             onClick={() => handleAddComponentEntry(semId, courseId, componentType, weight)}
-                            className="w-full py-1 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600"
+                            className="w-full py-1.5 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600"
                         >
-                            + Add {componentType} Entry
+                            + Add {componentType} Marks
                         </button>
                     )}
                 </div>
@@ -8089,6 +8102,62 @@
                             </div>
                         );
                     })
+                )}
+                
+                {/* Entry Marks Modal */}
+                {entryModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setEntryModal(null)}>
+                        <div className="w-full max-w-sm mx-4 bg-slate-900 rounded-2xl p-6 border border-slate-700" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold text-white mb-1">Enter Marks</h3>
+                            <p className="text-sm text-slate-400 mb-4">{entryModal.componentType}</p>
+                            
+                            <div className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Marks Obtained</label>
+                                    <input
+                                        type="number"
+                                        value={entryScore}
+                                        onChange={e => setEntryScore(e.target.value)}
+                                        placeholder="e.g. 35"
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-lg"
+                                        min="0"
+                                        autoFocus
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-slate-300 mb-1">Maximum Marks</label>
+                                    <input
+                                        type="number"
+                                        value={entryMaxScore}
+                                        onChange={e => setEntryMaxScore(e.target.value)}
+                                        placeholder="e.g. 50"
+                                        className="w-full px-4 py-3 bg-slate-800 border border-slate-700 rounded-xl text-white text-lg"
+                                        min="1"
+                                    />
+                                </div>
+                                {entryScore !== '' && entryMaxScore !== '' && Number(entryMaxScore) > 0 && (
+                                    <div className="text-center py-2 bg-slate-800/50 rounded-lg">
+                                        <span className="text-2xl font-bold text-indigo-400">{((Number(entryScore) / Number(entryMaxScore)) * 100).toFixed(1)}%</span>
+                                    </div>
+                                )}
+                            </div>
+                            
+                            <div className="flex gap-3 mt-6">
+                                <button
+                                    onClick={() => setEntryModal(null)}
+                                    className="flex-1 py-3 bg-slate-800 hover:bg-slate-700 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Cancel
+                                </button>
+                                <button
+                                    onClick={handleSubmitEntry}
+                                    className="flex-1 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-xl text-white font-medium transition-colors"
+                                >
+                                    Save Marks
+                                </button>
+                            </div>
+                        </div>
+                    </div>
                 )}
             </div>
         );
