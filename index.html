@@ -1927,19 +1927,34 @@
         selectedHabit: null,
         isLoading: true,
         
-        // Focus mode (existing - now part of study)
+        // Focus mode (enhanced - supports deep work)
         focusMode: {
             active: false,
             habitId: null,
             startTime: null,
-            duration: 25 * 60 // 25 minutes default
+            duration: 25 * 60, // 25 minutes default
+            mode: 'off', // 'off' | 'deepWork' | 'studyOnly'
+            endsAt: null,
+            silenceNotifications: true,
+            hideTabs: ['analytics', 'journal', 'expenses', 'settings']
         },
         
         // ===== NEW: Study Session Tracker =====
         studySessions: [], // { id, subject, startTime, endTime, duration, notes, date, type: 'regular'|'pomodoro' }
         studyGoal: { daily: 120, weekly: 600 }, // minutes
         subjects: [], // User-created subject list - SINGLE SOURCE OF TRUTH
-        activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime }
+        activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime, topicId }
+        
+        // ===== Flashcards (Spaced Repetition) =====
+        flashcards: {
+            decks: [], // [{ id, subjectId, name, createdAt, settings: { newPerDay, reviewPerDay, learningStepsMins, easeFactorBase } }]
+            cards: [], // [{ id, deckId, subjectId, front, back, tags, topicId, createdAt, updatedAt, suspended, state, dueAt, intervalDays, easeFactor, reps, lapses, lastReviewedAt }]
+            reviews: [], // [{ id, cardId, deckId, subjectId, reviewedAt, grade, timeMs }]
+            ui: { activeDeckId: null }
+        },
+        
+        // ===== Topics (per-subject chapters/units) =====
+        topics: [], // [{ id, subjectId, title, notes, order, plannedHours, progress, createdAt, updatedAt }]
         
         // ===== NEW: Assignments & Exams =====
         assignments: [], // { id, title, subject, dueDate, priority, status, grade, type: 'assignment'|'exam', prepProgress, topics, createdAt }
@@ -2071,9 +2086,28 @@
         TOGGLE_HABIT: 'TOGGLE_HABIT',
         REORDER_HABITS: 'REORDER_HABITS',
         
-        // Focus mode (existing)
+        // Focus mode (enhanced)
         START_FOCUS: 'START_FOCUS',
         END_FOCUS: 'END_FOCUS',
+        START_DEEP_WORK: 'START_DEEP_WORK',
+        END_DEEP_WORK: 'END_DEEP_WORK',
+        
+        // Flashcards
+        ADD_DECK: 'ADD_DECK',
+        UPDATE_DECK: 'UPDATE_DECK',
+        DELETE_DECK: 'DELETE_DECK',
+        ADD_CARD: 'ADD_CARD',
+        UPDATE_CARD: 'UPDATE_CARD',
+        DELETE_CARD: 'DELETE_CARD',
+        TOGGLE_SUSPEND_CARD: 'TOGGLE_SUSPEND_CARD',
+        REVIEW_CARD: 'REVIEW_CARD',
+        SET_ACTIVE_DECK: 'SET_ACTIVE_DECK',
+        
+        // Topics
+        ADD_TOPIC: 'ADD_TOPIC',
+        UPDATE_TOPIC: 'UPDATE_TOPIC',
+        DELETE_TOPIC: 'DELETE_TOPIC',
+        REORDER_TOPIC: 'REORDER_TOPIC',
         
         // Study Session Tracker
         START_STUDY_SESSION: 'START_STUDY_SESSION',
@@ -2287,6 +2321,7 @@
                 return {
                     ...state,
                     focusMode: {
+                        ...state.focusMode,
                         active: true,
                         habitId: payload.habitId,
                         startTime: Date.now(),
@@ -2299,12 +2334,170 @@
                 return {
                     ...state,
                     focusMode: {
+                        ...state.focusMode,
                         active: false,
                         habitId: null,
                         startTime: null,
-                        duration: 25 * 60
+                        duration: 25 * 60,
+                        mode: 'off',
+                        endsAt: null
                     }
                 };
+            }
+            
+            case ActionTypes.START_DEEP_WORK: {
+                const durationMs = (payload.durationMinutes || 50) * 60 * 1000;
+                return {
+                    ...state,
+                    focusMode: {
+                        ...state.focusMode,
+                        active: true,
+                        mode: payload.mode || 'deepWork',
+                        startTime: Date.now(),
+                        endsAt: new Date(Date.now() + durationMs).toISOString(),
+                        duration: (payload.durationMinutes || 50) * 60,
+                        silenceNotifications: true,
+                        hideTabs: payload.mode === 'studyOnly' ? ['analytics', 'journal', 'expenses', 'settings'] : ['analytics', 'journal', 'expenses', 'settings', 'matrix', 'command']
+                    }
+                };
+            }
+            
+            case ActionTypes.END_DEEP_WORK: {
+                return {
+                    ...state,
+                    focusMode: {
+                        active: false,
+                        habitId: null,
+                        startTime: null,
+                        duration: 25 * 60,
+                        mode: 'off',
+                        endsAt: null,
+                        silenceNotifications: true,
+                        hideTabs: ['analytics', 'journal', 'expenses', 'settings']
+                    }
+                };
+            }
+            
+            // ===== FLASHCARDS =====
+            case ActionTypes.ADD_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, decks: [...(state.flashcards?.decks || []), payload] } };
+            }
+            case ActionTypes.UPDATE_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, decks: (state.flashcards?.decks || []).map(d => d.id === payload.id ? { ...d, ...payload } : d) } };
+            }
+            case ActionTypes.DELETE_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, decks: (state.flashcards?.decks || []).filter(d => d.id !== payload), cards: (state.flashcards?.cards || []).filter(c => c.deckId !== payload), reviews: (state.flashcards?.reviews || []).filter(r => r.deckId !== payload) } };
+            }
+            case ActionTypes.ADD_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: [...(state.flashcards?.cards || []), payload] } };
+            }
+            case ActionTypes.UPDATE_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: (state.flashcards?.cards || []).map(c => c.id === payload.id ? { ...c, ...payload } : c) } };
+            }
+            case ActionTypes.DELETE_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: (state.flashcards?.cards || []).filter(c => c.id !== payload) } };
+            }
+            case ActionTypes.TOGGLE_SUSPEND_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: (state.flashcards?.cards || []).map(c => c.id === payload ? { ...c, suspended: !c.suspended } : c) } };
+            }
+            case ActionTypes.REVIEW_CARD: {
+                // payload: { cardId, grade (0-3), timeMs }
+                const { cardId, grade, timeMs } = payload;
+                const cards = state.flashcards?.cards || [];
+                const card = cards.find(c => c.id === cardId);
+                if (!card) return state;
+                
+                const now = new Date();
+                const learningSteps = [10, 1440]; // minutes
+                let newCard = { ...card };
+                
+                if (card.state === 'new') {
+                    newCard.state = 'learning';
+                    newCard.reps = 0;
+                    newCard.dueAt = new Date(now.getTime() + learningSteps[0] * 60000).toISOString();
+                } else if (card.state === 'learning') {
+                    if (grade <= 0) {
+                        newCard.dueAt = new Date(now.getTime() + learningSteps[0] * 60000).toISOString();
+                        newCard.lapses = (newCard.lapses || 0) + 1;
+                    } else {
+                        const currentStep = learningSteps.findIndex(s => {
+                            const stepDue = new Date(now.getTime() + s * 60000);
+                            return card.dueAt && new Date(card.dueAt) <= stepDue;
+                        });
+                        const nextStep = Math.min((currentStep >= 0 ? currentStep : 0) + 1, learningSteps.length);
+                        if (nextStep >= learningSteps.length || grade >= 3) {
+                            newCard.state = 'review';
+                            newCard.intervalDays = grade >= 3 ? 4 : 1;
+                            newCard.dueAt = new Date(now.getTime() + newCard.intervalDays * 86400000).toISOString();
+                        } else {
+                            newCard.dueAt = new Date(now.getTime() + learningSteps[nextStep] * 60000).toISOString();
+                        }
+                    }
+                } else {
+                    // review state - SM-2 algorithm
+                    let ef = newCard.easeFactor || 2.5;
+                    let iv = newCard.intervalDays || 1;
+                    if (grade === 0) { ef = Math.max(1.3, ef - 0.2); iv = 1; newCard.lapses = (newCard.lapses || 0) + 1; }
+                    else if (grade === 1) { ef = Math.max(1.3, ef - 0.15); iv = Math.max(1, Math.round(iv * 1.2)); }
+                    else if (grade === 2) { iv = Math.max(1, Math.round(iv * ef)); }
+                    else { ef = ef + 0.15; iv = Math.max(1, Math.round(iv * ef * 1.3)); }
+                    newCard.easeFactor = ef;
+                    newCard.intervalDays = iv;
+                    newCard.dueAt = new Date(now.getTime() + iv * 86400000).toISOString();
+                }
+                
+                newCard.reps = (newCard.reps || 0) + 1;
+                newCard.lastReviewedAt = now.toISOString();
+                newCard.updatedAt = now.toISOString();
+                
+                const review = {
+                    id: crypto.randomUUID(),
+                    cardId,
+                    deckId: card.deckId,
+                    subjectId: card.subjectId,
+                    reviewedAt: now.toISOString(),
+                    grade,
+                    timeMs: timeMs || 0
+                };
+                
+                // XP: +1 per review, capped at 50/day
+                const todayKey = DateUtils.toKey();
+                const todayReviews = (state.flashcards?.reviews || []).filter(r => r.reviewedAt?.startsWith(todayKey)).length;
+                const xpGain = todayReviews < 50 ? 1 : 0;
+                
+                return {
+                    ...state,
+                    flashcards: {
+                        ...state.flashcards,
+                        cards: cards.map(c => c.id === cardId ? newCard : c),
+                        reviews: [...(state.flashcards?.reviews || []), review]
+                    },
+                    xp: (state.xp || 0) + xpGain
+                };
+            }
+            case ActionTypes.SET_ACTIVE_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, ui: { ...(state.flashcards?.ui || {}), activeDeckId: payload } } };
+            }
+            
+            // ===== TOPICS =====
+            case ActionTypes.ADD_TOPIC: {
+                return { ...state, topics: [...(state.topics || []), payload] };
+            }
+            case ActionTypes.UPDATE_TOPIC: {
+                return { ...state, topics: (state.topics || []).map(t => t.id === payload.id ? { ...t, ...payload } : t) };
+            }
+            case ActionTypes.DELETE_TOPIC: {
+                return { ...state, topics: (state.topics || []).filter(t => t.id !== payload) };
+            }
+            case ActionTypes.REORDER_TOPIC: {
+                const { topicId: rtId, direction } = payload;
+                const topicsList = [...(state.topics || [])];
+                const idx = topicsList.findIndex(t => t.id === rtId);
+                if (idx < 0) return state;
+                const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+                if (swapIdx < 0 || swapIdx >= topicsList.length) return state;
+                [topicsList[idx], topicsList[swapIdx]] = [topicsList[swapIdx], topicsList[idx]];
+                return { ...state, topics: topicsList.map((t, i) => ({ ...t, order: i })) };
             }
             
             case ActionTypes.USE_STREAK_FREEZE: {
@@ -2386,7 +2579,8 @@
                     notes: payload?.notes || '',
                     date: DateUtils.toKey(),
                     type: state.activeStudySession.type,
-                    pomodoroCount: state.activeStudySession.pomodoroCount || 0
+                    pomodoroCount: state.activeStudySession.pomodoroCount || 0,
+                    topicId: state.activeStudySession.topicId || null
                 };
                 
                 const xpEarned = Math.floor(session.duration / 5) * 2; // 2 XP per 5 minutes
@@ -3123,6 +3317,18 @@
                     // Migrate grading schemes & templates
                     if (!parsed.grading) {
                         parsed.grading = createInitialState().grading;
+                    }
+                    // Migrate flashcards
+                    if (!parsed.flashcards) {
+                        parsed.flashcards = createInitialState().flashcards;
+                    }
+                    // Migrate topics
+                    if (!parsed.topics) {
+                        parsed.topics = [];
+                    }
+                    // Migrate focus mode enhancements
+                    if (parsed.focusMode && !parsed.focusMode.mode) {
+                        parsed.focusMode = { ...createInitialState().focusMode, ...parsed.focusMode };
                     }
                     // Migrate subjects from string array to object array (only once)
                     if (parsed.subjects && parsed.subjects.length > 0 && typeof parsed.subjects[0] === 'string') {
