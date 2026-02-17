@@ -11,7 +11,7 @@
 [![Tailwind CSS](https://img.shields.io/badge/Tailwind_CSS-38B2AC?style=for-the-badge&logo=tailwind-css&logoColor=white)](https://tailwindcss.com)
 [![PWA](https://img.shields.io/badge/PWA-enabled-5A0FC8?style=for-the-badge&logo=pwa&logoColor=white)](https://web.dev/progressive-web-apps/)
 [![License](https://img.shields.io/badge/license-MIT-green?style=for-the-badge)](LICENSE)
-[![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-8400+-orange?style=for-the-badge)]()
+[![Lines of Code](https://img.shields.io/badge/Lines%20of%20Code-8900+-orange?style=for-the-badge)]()
 [![No Backend](https://img.shields.io/badge/Backend-None%20Required-red?style=for-the-badge)]()
 
 </div>
@@ -31,7 +31,7 @@
   - [Sleep & Wellness Tracker](#-sleep--wellness-tracker)
   - [Daily Journal](#-daily-journal)
   - [Goals & Milestones](#-goals--milestones)
-  - [Research Log](#-research-log)
+  - [Research Intelligence](#-research-intelligence)
   - [Gamification System](#-gamification-system)
   - [Analytics Engine](#-analytics-engine)
   - [Unified Dashboard](#-unified-dashboard)
@@ -73,16 +73,16 @@
 
 StudentOS v3.0 is a major release with significant new modules and architectural improvements:
 
-- 📈 **Grade Tracker** — Semester, course, and assessment management with weighted GPA calculation
+- 📈 **Grade Tracker** — Semester, course, and assessment management with weighted GPA on a 10-point scale
 - 📅 **Timetable System** — Class scheduling with day/time/room management
-- 🎯 **Goals & Milestones** — Long-term goal tracking with milestone progress
-- 🔬 **Research Log** — Track papers, experiments, models, and deployments across skill domains
+- 🎯 **Goals & Milestones** — Long-term goal tracking with milestone progress across 5 categories
+- 🔬 **Research Intelligence** — Track papers, experiments, models, and deployments with 6 skill domains and 7 mastery levels
 - 🎲 **Daily Challenges** — Dynamic quest generation for engagement and XP rewards
-- 🏅 **Achievement Badges** — 10+ unlockable achievements with XP bonuses
+- 🏅 **Achievement Badges** — 50 unlockable achievements with XP bonuses (25–100 XP each)
 - 🔔 **Notification System** — In-app notifications for deadlines, reminders, and achievements
-- 📊 **Advanced Analytics** — Correlation engine, contribution heatmap, trend analysis
-- 🎨 **Subject Management** — Rich subject objects with colors, icons, and weekly goals
-- 🧠 **Cognitive Performance Engine** — Focus stability, attention patterns, and accountability scoring
+- 📊 **Advanced Analytics** — Correlation engine, contribution heatmap, trend analysis, cognitive performance metrics
+- 🎨 **Subject Management** — Rich subject objects with colors, icons, and weekly hour goals
+- 🧠 **Cognitive Performance Engine** — Cognitive Sharpness Index, Deep Work Capacity, Burnout Probability, Focus Stability, and more
 
 ---
 
@@ -90,15 +90,16 @@ StudentOS v3.0 is a major release with significant new modules and architectural
 
 ### 📚 Study Session Tracker
 - **Real-time study timer** with subject selection from your custom subject list
-- **Pomodoro mode** — Configurable study/break cycles (default: 25min study / 5min break / 15min long break)
+- **Pomodoro mode** — Configurable study/break cycles (default: 25min study / 5min break / 15min long break / 4 cycles)
 - **Session history** — View all past study sessions with duration, subject, and type
-- **Daily & weekly goals** — Configurable study time targets with visual progress tracking
+- **Daily & weekly goals** — Configurable study time targets (default: 2h daily / 10h weekly) with visual progress
 - **Subject-based analytics** — Monitor time spent per subject with color-coded breakdowns
 - **In-line subject management** — Add and manage subjects directly from the timer view
 - **XP rewards** — Earn +2 XP per 5 minutes of focused study
 
 ### 📝 Assignment & Exam Manager
 - **Comprehensive entry form** — Title, subject, due date, priority, type (assignment/exam), and notes
+- **Prep progress tracking** — Slider (0–100%) to track preparation progress on exams
 - **Color-coded urgency indicators**:
   - 🔴 **Critical**: Less than 24 hours remaining
   - 🟡 **Warning**: Less than 3 days remaining
@@ -106,17 +107,18 @@ StudentOS v3.0 is a major release with significant new modules and architectural
 - **Priority levels** — High, medium, low with visual indicators
 - **Status workflow** — Pending → In Progress → Completed
 - **Inline subject manager** — Create subjects without leaving the assignment form
-- **XP rewards** — +5 XP for planning, +30 XP for completion
+- **XP rewards** — +5 XP for planning, +30 XP for completing assignments, +50 XP for completing exams
 
 ### 📈 Grade Tracker & GPA
 > *New in v3.0*
 
 - **Semester management** — Create and organize multiple semesters
 - **Course tracking** — Add courses with credit hours linked to your subjects
-- **Assessment logging** — Record individual assessments (quizzes, midterms, finals, projects) with weight and score
-- **Weighted grade calculation** — Automatic GPA computation based on assessment weights
-- **Performance visualization** — See grade distributions and trends across courses
-- **Action types** — `ADD_SEMESTER`, `ADD_COURSE`, `ADD_ASSESSMENT`, `DELETE_ASSESSMENT`
+- **Component-based assessment** — Default components: Class Test (×2), Assignment (×2), Mid Semester, End Semester, Attendance
+- **Weighted grade calculation** — Automatic GPA computation on a **10-point Indian scale**:
+  - ≥90% → 10 (Excellent) · ≥80% → 9 (A) · ≥70% → 8 (B) · ≥60% → 7 (C) · ≥50% → 6 (D) · ≥40% → 5 (Pass) · <40% → 0 (Fail)
+- **Multi-level GPA** — Per-course GPA, semester GPA (credit-weighted), and cumulative CGPA (displayed as X.XX/10)
+- **Performance visualization** — Grade distributions and letter grades across courses
 
 ### 📅 Timetable & Scheduling
 > *New in v3.0*
@@ -127,15 +129,16 @@ StudentOS v3.0 is a major release with significant new modules and architectural
 - **Notes support** — Add notes to individual schedule entries
 - **Inline subject manager** — Add subjects directly from the timetable modal
 - **Visual schedule view** — Color-coded weekly overview
+- **XP rewards** — +5 XP per timetable entry
 
 ### 💰 Expense Tracker
 - **Detailed expense logging** — Amount, category, description, and date
-- **Monthly budget management** — Configurable budget with visual progress bar
-- **7 expense categories** — Food, Transport, Books, Entertainment, Subscriptions, Health, Other
+- **Monthly budget management** — Configurable budget (default: ₹5,000) with visual progress bar
+- **7 expense categories** — 🍔 Food, 🚗 Transport, 📚 Books, 🎮 Entertainment, 💳 Subscriptions, ⚕️ Health, 📦 Other
 - **Spending analysis** — Category breakdown with chart visualizations
 - **Time-based filters** — View expenses by day, week, or month
 - **Budget alerts** — Visual warnings at 80% (caution) and 100% (exceeded)
-- **Currency support** — Configurable currency in settings
+- **Currency support** — Configurable currency (₹, $, €, £, ¥) in settings
 - **XP rewards** — +2 XP per expense logged
 
 ### 😴 Sleep & Wellness Tracker
@@ -145,7 +148,7 @@ StudentOS v3.0 is a major release with significant new modules and architectural
 - **Exercise logging** — Record workout type, duration, and notes
 - **Mood tracking** — Daily mood selection with emoji (😄 😊 😐 😔 😢) and energy level (1–5)
 - **Wellness dashboard** — Quick-view cards for all wellness metrics
-- **XP rewards** — Sleep +5, Water +1, Exercise +10, Mood +3
+- **XP rewards** — Sleep +5, Water +1 per glass, Exercise +10, Mood +3
 
 ### 📓 Daily Journal
 - **Rich journal entries** — Write about your day with unlimited text
@@ -154,47 +157,53 @@ StudentOS v3.0 is a major release with significant new modules and architectural
 - **Automatic word count** — Real-time word counting for each entry
 - **Journal streak** — Track consecutive days of journaling
 - **Entry history** — Browse past entries with date navigation
+- **Journal reminder** — Configurable reminder in settings
 - **XP rewards** — +10 XP per journal entry
 
 ### 🎯 Goals & Milestones
 > *New in v3.0*
 
-- **Long-term goal creation** — Set goals with titles, categories, and descriptions
+- **Long-term goal creation** — Set goals with titles, descriptions, and deadlines
 - **Milestone tracking** — Break goals into milestones and track completion
-- **Goal categories** — Organize goals by type (academic, personal, career, etc.)
+- **5 goal categories** — Academic, Health, Financial, Personal, Career
 - **Progress visualization** — Visual progress bars for each goal
-- **Milestone completion** — Check off milestones as you achieve them
+- **Active vs. completed views** — Separate sections for ongoing and finished goals
+- **XP rewards** — +15 XP per goal created, +5 XP per milestone completed
 
-### 🔬 Research Log
+### 🔬 Research Intelligence
 > *New in v3.0*
 
-- **Research activity tracking** — Log papers read, experiments run, models trained, and deployments made
-- **Skill domain XP** — Track experience across ML, Robotics, Systems, Leadership, Research, and Engineering
-- **Duration logging** — Record time spent on research activities
-- **Activity types** — Papers, experiments, models, deployments, and more
+- **Research activity tracking** — Log papers read, experiments run, models trained, deployments made, insights, and bugfixes
+- **6 skill domains** with unique icons and colors:
+  - 🧠 Machine Learning · 🤖 Robotics · ⚙️ Systems · 🎯 Leadership · 🔬 Research · 🛠️ Engineering
+- **7 mastery levels** — Novice → Apprentice → Practitioner → Specialist → Expert → Master → Grandmaster
+- **Domain-specific XP** — Papers: 15 XP · Experiments: 25 XP · Models: 35 XP · Deployments: 50 XP · Insights: 10 XP · Bugfixes: 8 XP
+- **Research milestones** — Track and celebrate major research achievements (+100 XP)
+- **Duration logging** — Record time spent on each research activity
 
 ### 🎮 Gamification System
 
 #### XP & Leveling
 - **XP points** for every productive action across all modules
 - **50-level progression** — Level = floor(sqrt(XP / 100)) + 1
-- **Level titles**: Freshman → Student → Scholar → Achiever → Expert → Master → Sage → Virtuoso → Legend → Valedictorian
+- **10 level titles**: Freshman → Sophomore → Scholar → Achiever → Expert → Master → Sage → Virtuoso → Legend → Valedictorian
 - **XP progress bar** — Always visible in the header
 
 #### 🏅 Achievements
 > *New in v3.0*
 
-- **10+ unlockable achievement badges** — Earned through specific milestones
+- **50 unlockable achievement badges** — Earned through specific milestones across all modules
 - **Achievement notifications** — In-app alerts when badges are unlocked
-- **XP bonuses** — Bonus XP rewards for earning achievements
+- **XP bonuses** — 25–100 XP per achievement unlocked
+- **Examples**: First Steps (👣), Bookworm (📖), On Fire (🔥), Marathon (🏃), Budget Master (💰), Sleep Champion (😴), Dean's List (🎓), and many more
 
 #### 🎲 Daily Challenges
 > *New in v3.0*
 
-- **Dynamic quest generation** — Fresh challenges generated based on your patterns
-- **Variety of challenge types** — Study, wellness, journaling, and more
+- **Dynamic quest generation** — Fresh challenges generated based on your patterns and activity
+- **7+ challenge types** — Complete all habits, study neglected subjects, study variety, focused sessions, review streaks, and more
 - **Configurable targets** — Each challenge has specific completion criteria
-- **XP rewards** — Bonus XP for completing daily challenges
+- **XP rewards** — 10–25 XP per challenge completed
 
 #### 🔔 Notifications
 > *New in v3.0*
@@ -208,30 +217,39 @@ StudentOS v3.0 is a major release with significant new modules and architectural
 > *Significantly enhanced in v3.0*
 
 - **Contribution heatmap** — GitHub-style 365-day activity visualization
-- **Correlation analysis** — Pearson correlation between habits, sleep, study, and performance
-- **Trend detection** — Identify patterns and trends in your data over time
-- **Weekday analysis** — Discover which days you're most productive
-- **Streak analytics** — Track and visualize streak patterns
-- **Cognitive performance metrics** — Focus stability, attention patterns, accountability scoring
+- **5 analytics engines**:
+  - **Correlations** — Pearson correlation between habits, sleep, study, and performance
+  - **Trends** — Weekly trend detection per habit over time
+  - **Weekday patterns** — Best and worst days of the week for productivity
+  - **Streaks** — Current and longest streak analysis
+  - **Performance** — Weekly completion rate analysis
+- **Cognitive performance metrics**:
+  - Cognitive Sharpness Index (CSI)
+  - Deep Work Capacity (DWC)
+  - Burnout Probability prediction
+  - Focus Stability Score
+  - Decision Fatigue Risk
+  - Skill Gap Detection
+  - Predictive deadline risk assessment
 - **Mathematical foundations** — Sigmoid functions, z-score normalization, statistical analysis
-- **5 analytics engines** — Correlations, trends, weekday patterns, streaks, performance
 
 ### 📋 Unified Dashboard
 - **Quick-access widgets** for all major modules:
   - 📚 Study — Today's study time and active timer
-  - 📝 Assignments — Next upcoming deadline
+  - 📝 Assignments — Next upcoming deadline with urgency color
   - 💧 Wellness — Water intake, sleep, and mood at a glance
-  - 🏆 XP — Current level, total XP, and progress bar
+  - 🏆 XP — Current level, title, total XP, and progress bar
   - 🎲 Challenges — Active daily challenges
-- **Smart insights** — AI-powered suggestions based on your data patterns
+- **Smart insights** — Data-driven suggestions based on your patterns
 - **Stats overview** — Daily completion rate, streaks, and trends
 - **Best streak display** — Highlight your longest active streaks
 
 ### ✅ Habit Tracking
 - **Daily habit tracking** with completion checkboxes
 - **8 habit categories** — Health, Productivity, Learning, Fitness, Mindfulness, Social, Finance, Creative
-- **Color coding** — 8 color options for visual organization
-- **Eisenhower Matrix** — Organize habits by urgency and importance (4-quadrant view)
+- **8 color options** — Indigo, Emerald, Amber, Rose, Purple, Cyan, Sky, Orange
+- **Eisenhower Matrix** — Organize habits by urgency and importance (4-quadrant view):
+  - Q1: Do First (Urgent & Important) · Q2: Schedule (Important) · Q3: Delegate (Urgent) · Q4: Eliminate
 - **Streak tracking** — Monitor consecutive completion days with streak freezes (2 available)
 - **Focus timer** — Built-in Pomodoro sessions for habits
 - **Undo/Redo** — Full state rollback up to 30 actions
@@ -239,7 +257,7 @@ StudentOS v3.0 is a major release with significant new modules and architectural
 - **Export/Import** — JSON-based data backup and restore
 
 ### 🎨 Design & UX
-- **Multiple themes** — Dark, light, and AMOLED black themes
+- **Multiple themes** — Dark, Light, and AMOLED Black themes
 - **Glassmorphism effects** — Modern translucent UI elements
 - **Mobile-first responsive design** — Optimized for phones, tablets, and desktop
 - **Bottom tab navigation** — Intuitive 5-tab navigation bar
@@ -315,7 +333,7 @@ Then open `http://localhost:8000` in your browser.
 
 | Tab | Icon | Content |
 |-----|------|---------|
-| **Home** | 📋 | Dashboard with widgets, habits, and daily overview |
+| **Home** | 🏠 | Dashboard with widgets, habits, and daily overview |
 | **Study** | 📚 | Study timer, assignments, timetable (sub-tabs) |
 | **Stats** | 📊 | Analytics, insights, contribution heatmap, Eisenhower Matrix |
 | **Journal** | 📓 | Daily journal entries and wellness tracking cards |
@@ -336,6 +354,8 @@ Earn XP for every productive action across all modules:
 | Study (per 5 min) | +2 XP | Study |
 | Add Assignment | +5 XP | Assignments |
 | Complete Assignment | +30 XP | Assignments |
+| Complete Exam | +50 XP | Assignments |
+| Add Timetable Entry | +5 XP | Timetable |
 | Log Expense | +2 XP | Expenses |
 | Log Sleep | +5 XP | Wellness |
 | Log Water (per glass) | +1 XP | Wellness |
@@ -343,8 +363,15 @@ Earn XP for every productive action across all modules:
 | Log Mood | +3 XP | Wellness |
 | Write Journal Entry | +10 XP | Journal |
 | Complete Habit | +10 XP | Habits |
-| Complete Daily Challenge | Varies | Challenges |
-| Unlock Achievement | Bonus | Achievements |
+| Add Goal | +15 XP | Goals |
+| Complete Milestone | +5 XP | Goals |
+| Log Paper Read | +15 XP | Research |
+| Log Experiment | +25 XP | Research |
+| Log Model Trained | +35 XP | Research |
+| Log Deployment | +50 XP | Research |
+| Research Milestone | +100 XP | Research |
+| Complete Daily Challenge | 10–25 XP | Challenges |
+| Unlock Achievement | 25–100 XP | Achievements |
 
 ### Level Progression
 
@@ -355,7 +382,7 @@ Level = floor(sqrt(XP / 100)) + 1       (Max: Level 50)
 | Level Range | Title |
 |-------------|-------|
 | 1–5 | 🎒 Freshman |
-| 6–10 | 📖 Student |
+| 6–10 | 📖 Sophomore |
 | 11–15 | 🎓 Scholar |
 | 16–20 | ⭐ Achiever |
 | 21–25 | 💡 Expert |
@@ -387,14 +414,14 @@ Level = floor(sqrt(XP / 100)) + 1       (Max: Level 50)
 ```
 ┌─────────────────────────────────────────────────────────────┐
 │                        index.html                           │
-│                    (8,400+ lines)                            │
+│                    (8,900+ lines)                            │
 │                                                             │
 │  ┌──────────────────────────────────────────────────────┐   │
 │  │                   React 18 App                       │   │
 │  │                                                      │   │
 │  │  ┌────────────┐  ┌─────────────┐  ┌──────────────┐  │   │
 │  │  │ useReducer │  │  ActionTypes │  │  appReducer  │  │   │
-│  │  │   (State)  │──│  (50+ types) │──│  (Dispatch)  │  │   │
+│  │  │   (State)  │──│  (52+ types) │──│  (Dispatch)  │  │   │
 │  │  └────────────┘  └─────────────┘  └──────────────┘  │   │
 │  │         │                                            │   │
 │  │  ┌──────┴──────────────────────────────────────┐     │   │
@@ -411,9 +438,9 @@ Level = floor(sqrt(XP / 100)) + 1       (Max: Level 50)
 ```
 
 #### Key Patterns
-- ✅ **Single HTML file** — 8,400+ lines, zero build complexity, instant deployment
+- ✅ **Single HTML file** — 8,900+ lines, zero build complexity, instant deployment
 - ✅ **React Hooks only** — `useState`, `useReducer`, `useEffect`, `useMemo`, `useCallback`, `useRef`
-- ✅ **Centralized state** — Single `useReducer` with 50+ action types via `ActionTypes` constants
+- ✅ **Centralized state** — Single `useReducer` with 52+ action types via `ActionTypes` constants
 - ✅ **Full memoization** — Every component wrapped in `React.memo` for optimal re-renders
 - ✅ **Debounced persistence** — State saved to localStorage after 500ms of inactivity
 - ✅ **Error boundaries** — Graceful error handling prevents full-app crashes
@@ -424,13 +451,18 @@ Level = floor(sqrt(XP / 100)) + 1       (Max: Level 50)
 
 ```
 habit-tracker-pwa/
-├── index.html          # Main application (8,400+ lines of React/JSX)
+├── index.html          # Main application (8,900+ lines of React/JSX)
 ├── manifest.json       # PWA manifest with shortcuts and categories
 ├── sw.js               # Service worker (cache: studentos-v3.0)
-├── icons/              # PWA icons (192px, 512px, maskable)
+├── icons/              # PWA icons and favicons
 │   ├── icon-192.png.png
 │   ├── icon-512.png.png
-│   └── icon-maskable.png.png
+│   ├── icon-maskable.png.png
+│   ├── favicon.ico
+│   ├── favicon-16x16.png
+│   ├── favicon-32x32.png
+│   ├── site.webmanifest
+│   └── about.txt
 └── README.md           # This documentation
 ```
 
@@ -448,8 +480,9 @@ The application maintains a comprehensive state object in localStorage, managed 
   studySessions: [],             // [{ subject, duration, date, type }]
   studyGoal: { daily: 120, weekly: 600 },
   subjects: [],                  // [{ id, name, color, icon, weeklyGoalHours }]
-  assignments: [],               // [{ title, subject, dueDate, priority, type, status }]
+  assignments: [],               // [{ title, subject, dueDate, priority, type, status, progress }]
   timetable: [],                 // [{ id, subject, day, startTime, endTime, room, notes }]
+  activeStudySession: null,      // Currently running study session
 
   // ── Grade Tracking ──────────────────────────
   grades: {
@@ -457,7 +490,7 @@ The application maintains a comprehensive state object in localStorage, managed 
       id, name,
       courses: [{
         id, subjectId, creditHours,
-        assessments: [{ id, name, type, weight, score, maxScore }]
+        assessments: [{ id, name, type, weight, score, maxScore, componentWeight }]
       }]
     }]
   },
@@ -465,7 +498,7 @@ The application maintains a comprehensive state object in localStorage, managed 
   // ── Financial ───────────────────────────────
   expenses: [],                  // [{ amount, category, description, date }]
   monthlyBudget: 5000,
-  expenseCategories: [...],
+  expenseCategories: [...],      // Food, Transport, Books, Entertainment, Subscriptions, Health, Other
 
   // ── Wellness ────────────────────────────────
   sleepLog: [],                  // [{ date, hours, quality }]
@@ -476,21 +509,25 @@ The application maintains a comprehensive state object in localStorage, managed 
   sleepGoal: 8,
 
   // ── Goals ───────────────────────────────────
-  goals: [],                     // [{ title, category, milestones: [{ text, done }] }]
-  goalCategories: [...],
+  goals: [],                     // [{ title, category, description, deadline, milestones: [{ text, done }] }]
+  goalCategories: [...],         // Academic, Health, Financial, Personal, Career
 
   // ── Journal ─────────────────────────────────
   journalEntries: [],            // [{ date, content, mood, energy, gratitude, wordCount }]
 
-  // ── Research ────────────────────────────────
+  // ── Research Intelligence ───────────────────
   researchLog: [],               // [{ type, title, duration, domain }]
-  skillXP: { ml, robotics, systems, leadership, research, engineering },
+  skillXP: {                     // Domain-specific XP tracking
+    ml: 0, robotics: 0, systems: 0,
+    leadership: 0, research: 0, engineering: 0
+  },
+  researchMilestones: [],        // Major research achievements
 
   // ── Gamification ────────────────────────────
   xp: 0,
   level: 1,
   totalPoints: 0,
-  achievements: [],              // Earned achievement IDs
+  achievements: [],              // Earned achievement IDs (50 possible)
   dailyChallenges: [],           // [{ text, type, target, xpReward }]
   streakFreezes: 2,
 
@@ -502,11 +539,14 @@ The application maintains a comprehensive state object in localStorage, managed 
     theme,                       // 'dark' | 'light' | 'amoled'
     soundEnabled, hapticEnabled,
     reminderTime, weekStartsOn,
-    currency, timeFormat,
-    pomodoroStudy: 25,           // Configurable Pomodoro durations
+    currency,                    // Default: '₹' (supports ₹, $, €, £, ¥)
+    timeFormat,                  // '12h' | '24h'
+    pomodoroStudy: 25,           // Configurable Pomodoro durations (minutes)
     pomodoroShortBreak: 5,
     pomodoroLongBreak: 15,
+    pomodoroCycles: 4,
     studyReminderEnabled,
+    journalReminderEnabled,
     dailyStudyGoal: 120,
     weeklyStudyGoal: 600,
     monthlyBudget: 5000,
@@ -517,7 +557,9 @@ The application maintains a comprehensive state object in localStorage, managed 
   // ── UI State ────────────────────────────────
   view: 'dashboard',
   selectedHabit: null,
-  undoStack: [],
+  isLoading: false,
+  focusMode: null,
+  undoStack: [],                 // Up to 30 undo states
   redoStack: []
 }
 ```
@@ -545,13 +587,14 @@ StudentOS is designed with a **privacy-first architecture**:
 ### 🎓 For Students
 - **Track study time** across multiple subjects with Pomodoro timers
 - **Never miss deadlines** with color-coded urgency on assignments and exams
-- **Monitor grades** with semester/course/assessment tracking and GPA calculation
+- **Monitor grades** with semester/course/assessment tracking and 10-point GPA calculation
 - **Manage your budget** with categorized expense tracking and alerts
 - **Track wellness** — sleep, hydration, exercise, and mood in one place
 - **Build consistency** with habit tracking, streaks, and streak freezes
 - **Reflect daily** through journaling with mood and gratitude prompts
-- **Stay motivated** with XP, levels, achievements, and daily challenges
+- **Stay motivated** with XP, levels, 50 achievements, and daily challenges
 - **Analyze patterns** with correlation analytics and contribution heatmaps
+- **Log research** activities with domain-specific skill tree progression
 
 ### 💼 For Professionals
 - Use the **Eisenhower Matrix** for task prioritization
