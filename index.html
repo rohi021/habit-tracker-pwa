@@ -3335,6 +3335,9 @@
                     }
                 });
                 
+                const todayCompletions = state.routines?.completions?.[todayKey] || {};
+                const existingCompletion = todayCompletions[payload.routineId];
+                
                 return withUndo({
                     ...state,
                     habits: newHabits,
@@ -3344,11 +3347,11 @@
                         completions: {
                             ...(state.routines?.completions || {}),
                             [todayKey]: {
-                                ...((state.routines?.completions || {})[todayKey] || {}),
+                                ...todayCompletions,
                                 [payload.routineId]: {
                                     completedAt: new Date().toISOString(),
                                     habitIdsCompleted: [...new Set([
-                                        ...((state.routines?.completions?.[todayKey]?.[payload.routineId]?.habitIdsCompleted) || []),
+                                        ...(existingCompletion?.habitIdsCompleted || []),
                                         ...completedIds
                                     ])]
                                 }
@@ -4633,7 +4636,7 @@
         const todayKey = DateUtils.toKey();
         const routines = state.routines?.items || [];
         const activeHabits = useMemo(() => 
-            state.habitOrder.map(id => state.habits[id]).filter(h => h && !h.archived),
+            state.habitOrder.map(id => ({ ...state.habits[id], _hid: id })).filter(h => h && !h.archived),
             [state.habits, state.habitOrder]
         );
         
@@ -4766,7 +4769,7 @@
                                     <label className="text-xs text-slate-400 mb-1 block">Habits ({editorHabitIds.length} selected)</label>
                                     <div className="space-y-1 max-h-48 overflow-y-auto">
                                         {activeHabits.map(h => {
-                                            const hid = h.id || Object.keys(state.habits).find(k => state.habits[k] === h);
+                                            const hid = h._hid;
                                             const selected = editorHabitIds.includes(hid);
                                             return (
                                             <button key={hid} 
@@ -4825,19 +4828,18 @@
         if (lastPeriod) {
             const lastStart = DateUtils.parseKey(lastPeriod.startDate);
             const today = new Date();
-            const daysSinceStart = Math.floor((today - lastStart) / 86400000);
-            cycleDay = daysSinceStart + 1;
+            const daysSinceStart = Math.round((today - lastStart) / 86400000);
+            cycleDay = (daysSinceStart % cycleLen) + 1;
             
-            if (cycleDay > cycleLen) {
-                cycleDay = cycleDay % cycleLen || cycleLen;
-            }
+            const nextDate = DateUtils.addDays(lastStart, cycleLen * Math.max(1, Math.ceil((daysSinceStart + 1) / cycleLen)));
+            nextPeriodDate = nextDate;
             
-            nextPeriodDate = DateUtils.toKey(DateUtils.addDays(lastStart, cycleLen));
-            
-            // Phase estimation
+            // Dynamic phase estimation based on user settings
+            const lutealLen = state.cycle?.settings?.lutealLength || 14;
+            const ovulationDay = cycleLen - lutealLen;
             if (cycleDay <= periodLen) currentPhase = 'Menstrual';
-            else if (cycleDay <= 13) currentPhase = 'Follicular';
-            else if (cycleDay <= 16) currentPhase = 'Ovulation';
+            else if (cycleDay < ovulationDay - 1) currentPhase = 'Follicular';
+            else if (cycleDay <= ovulationDay + 1) currentPhase = 'Ovulation';
             else currentPhase = 'Luteal';
         }
         
@@ -4864,7 +4866,7 @@
                             <div className="text-[10px] text-slate-400">Phase</div>
                         </div>
                         <div className="text-center">
-                            <div className="text-sm font-semibold text-slate-300">{nextPeriodDate}</div>
+                            <div className="text-sm font-semibold text-slate-300">{nextPeriodDate ? (() => { const d = nextPeriodDate instanceof Date ? nextPeriodDate : DateUtils.parseKey(nextPeriodDate); const diff = Math.round((d - new Date()) / 86400000); return diff <= 0 ? 'Any day' : diff <= 7 ? `in ${diff}d` : d.toLocaleDateString('en', { month: 'short', day: 'numeric' }); })() : '—'}</div>
                             <div className="text-[10px] text-slate-400">Next (est.)</div>
                         </div>
                     </div>
