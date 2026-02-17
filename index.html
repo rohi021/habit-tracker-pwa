@@ -3347,10 +3347,10 @@
                                 ...((state.routines?.completions || {})[todayKey] || {}),
                                 [payload.routineId]: {
                                     completedAt: new Date().toISOString(),
-                                    habitIdsCompleted: [
+                                    habitIdsCompleted: [...new Set([
                                         ...((state.routines?.completions?.[todayKey]?.[payload.routineId]?.habitIdsCompleted) || []),
                                         ...completedIds
-                                    ]
+                                    ])]
                                 }
                             }
                         }
@@ -4564,7 +4564,7 @@
         
         const alerts = useMemo(() => generateWellnessAlerts(state), [
             state.sleepLog, state.studySessions, state.moodLog, 
-            state.wellnessInsights, state.settings
+            state.wellnessInsights, state.settings, state.sleepGoal
         ]);
         
         if (alerts.length === 0) return null;
@@ -4765,17 +4765,21 @@
                                 <div>
                                     <label className="text-xs text-slate-400 mb-1 block">Habits ({editorHabitIds.length} selected)</label>
                                     <div className="space-y-1 max-h-48 overflow-y-auto">
-                                        {activeHabits.map(h => (
-                                            <button key={h.id || Object.keys(state.habits).find(k => state.habits[k] === h)} 
-                                                onClick={() => toggleHabitInRoutine(h.id || Object.keys(state.habits).find(k => state.habits[k] === h))}
+                                        {activeHabits.map(h => {
+                                            const hid = h.id || Object.keys(state.habits).find(k => state.habits[k] === h);
+                                            const selected = editorHabitIds.includes(hid);
+                                            return (
+                                            <button key={hid} 
+                                                onClick={() => toggleHabitInRoutine(hid)}
                                                 className={`w-full flex items-center gap-2 p-2 rounded-lg text-left text-sm transition-colors ${
-                                                    editorHabitIds.includes(h.id || Object.keys(state.habits).find(k => state.habits[k] === h)) ? 'bg-indigo-500/20 text-white' : 'bg-slate-700/50 text-slate-300'
+                                                    selected ? 'bg-indigo-500/20 text-white' : 'bg-slate-700/50 text-slate-300'
                                                 }`}>
                                                 <span>{h.icon || '📌'}</span>
                                                 <span>{h.name}</span>
-                                                {editorHabitIds.includes(h.id || Object.keys(state.habits).find(k => state.habits[k] === h)) && <span className="ml-auto text-indigo-400">✓</span>}
+                                                {selected && <span className="ml-auto text-indigo-400">✓</span>}
                                             </button>
-                                        ))}
+                                            );
+                                        })}
                                     </div>
                                 </div>
                             </div>
@@ -4873,8 +4877,8 @@
                 {showLog && (
                     <div className="mt-3 space-y-2 border-t border-slate-700 pt-3">
                         <div>
-                            <label className="text-xs text-slate-400">Period start date</label>
-                            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                            <label htmlFor="period-start-date" className="text-xs text-slate-400">Period start date</label>
+                            <input id="period-start-date" type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
                                 className="w-full bg-slate-700 text-white rounded-lg px-3 py-1.5 text-sm mt-1" />
                         </div>
                         <div>
