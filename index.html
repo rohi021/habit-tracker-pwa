@@ -7700,6 +7700,18 @@
         const [entryMaxScore, setEntryMaxScore] = useState('100');
         
         const semesters = state.grades?.semesters || [];
+        const grading = state.grading || createInitialState().grading;
+        const schemes = grading.schemes || [];
+        const templates = grading.templates || [];
+        const activeScheme = useMemo(() => schemes.find(s => s.id === grading.activeSchemeId) || schemes[0] || createInitialState().grading.schemes[0], [schemes, grading.activeSchemeId]);
+        
+        // --- UI state for new panels ---
+        const [activeTab, setActiveTab] = useState('grades'); // grades | schemes | templates
+        const [schemeModal, setSchemeModal] = useState(null); // null | scheme object for editing
+        const [templateModal, setTemplateModal] = useState(null); // null | template object for editing
+        const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id || '');
+        const [whatIfCourse, setWhatIfCourse] = useState(null); // { semId, courseId }
+        const [whatIfOverrides, setWhatIfOverrides] = useState({}); // { componentType: { score, maxScore } }
         
         const DEFAULT_COMPONENTS = [
             { type: 'Class Test', label: 'Class Tests', icon: '📝', multiple: true, maxEntries: 2 },
@@ -7709,15 +7721,36 @@
             { type: 'Attendance', label: 'Attendance', icon: '📅', multiple: false, maxEntries: 1 },
         ];
         
-        const getLetterGrade = (pct) => {
-            if (pct >= 90) return { grade: 'Excellent', color: 'text-emerald-400' };
-            if (pct >= 80) return { grade: 'A', color: 'text-emerald-400' };
-            if (pct >= 70) return { grade: 'B', color: 'text-blue-400' };
-            if (pct >= 60) return { grade: 'C', color: 'text-amber-400' };
-            if (pct >= 50) return { grade: 'D', color: 'text-orange-400' };
-            if (pct >= 40) return { grade: 'Pass', color: 'text-orange-500' };
-            return { grade: 'Fail', color: 'text-rose-400' };
-        };
+        // --- Pure helper: percent → GPA using active scheme boundaries ---
+        const percentToGpa = useCallback((pct, scheme) => {
+            const boundaries = (scheme || activeScheme).boundaries || [];
+            for (const b of boundaries) {
+                if (pct >= b.minPercent) return { gpa: b.gpa, letter: b.letter, label: b.label };
+            }
+            const last = boundaries[boundaries.length - 1];
+            return last ? { gpa: last.gpa, letter: last.letter, label: last.label } : { gpa: 0, letter: 'F', label: 'Fail' };
+        }, [activeScheme]);
+        
+        // --- Pure helper: apply rounding ---
+        const roundGpa = useCallback((value, scheme) => {
+            const r = (scheme || activeScheme).rounding || { mode: 'fixed', decimals: 2 };
+            const d = Math.pow(10, r.decimals || 2);
+            if (r.mode === 'floor') return Math.floor(value * d) / d;
+            if (r.mode === 'ceil') return Math.ceil(value * d) / d;
+            return Math.round(value * d) / d; // 'fixed' or 'nearest'
+        }, [activeScheme]);
+        
+        // --- Scheme-based getLetterGrade (replaces hardcoded) ---
+        const getLetterGrade = useCallback((pct) => {
+            const { letter, label } = percentToGpa(pct);
+            const grade = letter || label || 'N/A';
+            // Color based on percentage ranges
+            let color = 'text-rose-400';
+            if (pct >= 80) color = 'text-emerald-400';
+            else if (pct >= 60) color = 'text-blue-400';
+            else if (pct >= 40) color = 'text-amber-400';
+            return { grade, color };
+        }, [percentToGpa]);
         
         // Migrate old assessments to component-based structure for backward compat
         const getComponents = (course) => {
@@ -7771,13 +7804,7 @@
         const calcCourseGPA = (course) => {
             const pct = calcCoursePercentage(course);
             if (pct === null) return null;
-            if (pct >= 90) return 10;
-            if (pct >= 80) return 9;
-            if (pct >= 70) return 8;
-            if (pct >= 60) return 7;
-            if (pct >= 50) return 6;
-            if (pct >= 40) return 5;
-            return 0;
+            return percentToGpa(pct).gpa;
         };
         
         const calcSemesterGPA = (semester) => {
@@ -7790,7 +7817,7 @@
                     totalPoints += gpa * (c.creditHours || 3);
                 }
             });
-            return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 'N/A';
+            return totalCredits > 0 ? roundGpa(totalPoints / totalCredits).toFixed(2) : 'N/A';
         };
         
         const calcCGPA = () => {
@@ -7804,7 +7831,7 @@
                     }
                 });
             });
-            return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 'N/A';
+            return totalCredits > 0 ? roundGpa(totalPoints / totalCredits).toFixed(2) : 'N/A';
         };
         
         const handleAddSemester = () => {
@@ -7827,7 +7854,21 @@
         const handleAddCourse = (semId) => {
             if (!courseName.trim()) return;
             const newId = crypto.randomUUID();
-            dispatch({ type: ActionTypes.ADD_COURSE, payload: { semesterId: semId, course: { id: newId, name: courseName.trim(), creditHours: courseCredits, assessments: [] } } });
+            // Generate assessments from selected template
+            let assessments = [];
+            const tmpl = templates.find(t => t.id === selectedTemplateId);
+            if (tmpl && tmpl.components) {
+                assessments = tmpl.components.map(comp => ({
+                    id: crypto.randomUUID(),
+                    name: comp.name,
+                    type: comp.type,
+                    componentWeight: comp.weight,
+                    weight: comp.weight,
+                    score: null,
+                    maxScore: null,
+                }));
+            }
+            dispatch({ type: ActionTypes.ADD_COURSE, payload: { semesterId: semId, course: { id: newId, name: courseName.trim(), creditHours: courseCredits, assessments } } });
             setCourseName(''); setCourseCredits(3); setShowAddCourse(null);
             setExpandedCourse(newId);
             showToast('Course added', 'success');
@@ -7999,7 +8040,7 @@
                         <p className="text-slate-400 text-sm">Track courses, components & weighted grades</p>
                     </div>
                     <div className="text-right">
-                        <div className="text-xs text-slate-400">CGPA (out of 10)</div>
+                        <div className="text-xs text-slate-400">CGPA (out of {activeScheme.scaleMax})</div>
                         <div className="text-2xl font-bold text-indigo-400">{calcCGPA()}</div>
                     </div>
                 </div>
@@ -8043,7 +8084,7 @@
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-sm text-indigo-400 font-medium">GPA: {calcSemesterGPA(sem)}/10</span>
+                                        <span className="text-sm text-indigo-400 font-medium">GPA: {calcSemesterGPA(sem)}/{activeScheme.scaleMax}</span>
                                         <button onClick={e => { e.stopPropagation(); handleDeleteSemester(sem.id); }}
                                             className="text-rose-400 hover:text-rose-300 text-sm p-1" aria-label="Delete semester">🗑️</button>
                                     </div>
@@ -8211,6 +8252,16 @@
                                                     <input type="number" value={courseCredits} onChange={e => setCourseCredits(Math.max(1, Math.min(10, Number(e.target.value))))}
                                                         min="1" max="10" className="w-16 px-2 py-1 bg-slate-800 rounded text-white text-xs border border-slate-600" />
                                                 </div>
+                                                {templates.length > 0 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <label className="text-xs text-slate-400">Template:</label>
+                                                        <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}
+                                                            className="flex-1 px-2 py-1 bg-slate-800 rounded text-white text-xs border border-slate-600">
+                                                            <option value="">None (empty course)</option>
+                                                            {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
                                                 <div className="flex gap-2">
                                                     <button onClick={() => handleAddCourse(sem.id)} className="flex-1 py-1.5 bg-indigo-500 rounded text-white text-sm font-medium">Add Course</button>
                                                     <button onClick={() => { setShowAddCourse(null); setCourseName(''); }} className="flex-1 py-1.5 bg-slate-700 rounded text-slate-300 text-sm">Cancel</button>
@@ -8279,6 +8330,175 @@
                                 >
                                     Save Marks
                                 </button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* ===== Grading Scheme Manager ===== */}
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-white">⚙️ Grading Schemes</h3>
+                        <button onClick={() => setSchemeModal({ id: '', name: '', scaleMax: 10, rounding: { mode: 'fixed', decimals: 2 }, boundaries: [{ minPercent: 90, gpa: 10, letter: 'O', label: 'Excellent' }, { minPercent: 80, gpa: 9, letter: 'A+', label: 'Very Good' }, { minPercent: 70, gpa: 8, letter: 'A', label: 'Good' }, { minPercent: 60, gpa: 7, letter: 'B+', label: 'Above Avg' }, { minPercent: 50, gpa: 6, letter: 'B', label: 'Avg' }, { minPercent: 40, gpa: 5, letter: 'C', label: 'Pass' }, { minPercent: 0, gpa: 0, letter: 'F', label: 'Fail' }] })}
+                            className="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30">+ Add Scheme</button>
+                    </div>
+                    <div className="space-y-1.5">
+                        {schemes.map(s => (
+                            <div key={s.id} className={`flex items-center justify-between p-2 rounded-lg border ${s.id === grading.activeSchemeId ? 'border-indigo-500/50 bg-indigo-500/10' : 'border-slate-700 bg-slate-900/40'}`}>
+                                <div>
+                                    <span className="text-xs text-white font-medium">{s.name}</span>
+                                    <span className="text-[10px] text-slate-400 ml-1">({s.boundaries?.length || 0} levels, max {s.scaleMax})</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    {s.id !== grading.activeSchemeId && (
+                                        <button onClick={() => dispatch({ type: ActionTypes.SET_ACTIVE_GRADING_SCHEME, payload: s.id })}
+                                            className="text-[10px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded hover:bg-emerald-500/30">Set Active</button>
+                                    )}
+                                    {s.id === grading.activeSchemeId && <span className="text-[10px] px-1.5 py-0.5 bg-indigo-500/30 text-indigo-300 rounded">Active</span>}
+                                    <button onClick={() => setSchemeModal({...s})} className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Edit scheme">✏️</button>
+                                    <button onClick={() => { dispatch({ type: ActionTypes.ADD_GRADING_SCHEME, payload: { ...s, id: crypto.randomUUID(), name: s.name + ' (copy)', boundaries: s.boundaries.map(b => ({...b})) } }); showToast('Scheme duplicated', 'success'); }}
+                                        className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Duplicate scheme">📋</button>
+                                    {s.id !== grading.activeSchemeId && (
+                                        <button onClick={() => { dispatch({ type: ActionTypes.DELETE_GRADING_SCHEME, payload: s.id }); showToast('Scheme deleted', 'success'); }}
+                                            className="text-rose-400 hover:text-rose-300 text-xs p-0.5" aria-label="Delete scheme">✕</button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                
+                {/* ===== Assessment Template Manager ===== */}
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-white">📄 Assessment Templates</h3>
+                        <button onClick={() => setTemplateModal({ id: '', name: '', components: [{ key: crypto.randomUUID(), name: 'Component 1', type: 'Custom', weight: 100 }] })}
+                            className="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30">+ Add Template</button>
+                    </div>
+                    <div className="space-y-1.5">
+                        {templates.map(t => {
+                            const totalW = (t.components || []).reduce((s, c) => s + (c.weight || 0), 0);
+                            return (
+                                <div key={t.id} className="flex items-center justify-between p-2 rounded-lg border border-slate-700 bg-slate-900/40">
+                                    <div>
+                                        <span className="text-xs text-white font-medium">{t.name}</span>
+                                        <span className="text-[10px] text-slate-400 ml-1">({(t.components || []).length} comps, {totalW}%{totalW !== 100 ? ' ⚠️' : ''})</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => setTemplateModal({...t, components: (t.components || []).map(c => ({...c}))})} className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Edit template">✏️</button>
+                                        <button onClick={() => { dispatch({ type: ActionTypes.ADD_GRADE_TEMPLATE, payload: { ...t, id: crypto.randomUUID(), name: t.name + ' (copy)', components: (t.components || []).map(c => ({...c, key: crypto.randomUUID()})) } }); showToast('Template duplicated', 'success'); }}
+                                            className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Duplicate template">📋</button>
+                                        <button onClick={() => { dispatch({ type: ActionTypes.DELETE_GRADE_TEMPLATE, payload: t.id }); showToast('Template deleted', 'success'); }}
+                                            className="text-rose-400 hover:text-rose-300 text-xs p-0.5" aria-label="Delete template">✕</button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+                
+                {/* ===== Scheme Editor Modal ===== */}
+                {schemeModal && (
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSchemeModal(null)}>
+                        <div className="w-full max-w-lg mx-4 bg-slate-900 rounded-t-2xl sm:rounded-2xl p-5 border border-slate-700 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold text-white mb-3">{schemeModal.id ? 'Edit Scheme' : 'New Scheme'}</h3>
+                            <div className="space-y-3">
+                                <div className="flex gap-2">
+                                    <input type="text" value={schemeModal.name} onChange={e => setSchemeModal({...schemeModal, name: e.target.value})} placeholder="Scheme name"
+                                        className="flex-1 px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                                    <input type="number" value={schemeModal.scaleMax} onChange={e => setSchemeModal({...schemeModal, scaleMax: Math.max(1, Number(e.target.value))})}
+                                        className="w-20 px-2 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm text-center" min="1" />
+                                    <span className="text-xs text-slate-400 self-center">max</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-400">Rounding:</label>
+                                    <select value={schemeModal.rounding?.mode || 'fixed'} onChange={e => setSchemeModal({...schemeModal, rounding: {...(schemeModal.rounding || {}), mode: e.target.value}})}
+                                        className="px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs">
+                                        <option value="fixed">Fixed</option><option value="floor">Floor</option><option value="ceil">Ceil</option><option value="nearest">Nearest</option>
+                                    </select>
+                                    <input type="number" value={schemeModal.rounding?.decimals ?? 2} onChange={e => setSchemeModal({...schemeModal, rounding: {...(schemeModal.rounding || {}), decimals: Math.max(0, Math.min(4, Number(e.target.value)))}})}
+                                        className="w-14 px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" max="4" />
+                                    <span className="text-xs text-slate-400">decimals</span>
+                                </div>
+                                <div className="text-xs font-medium text-slate-300">Boundaries (min % → GPA)</div>
+                                <div className="space-y-1">
+                                    {(schemeModal.boundaries || []).map((b, idx) => (
+                                        <div key={idx} className="flex items-center gap-1">
+                                            <input type="number" value={b.minPercent} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], minPercent: Number(e.target.value)}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="w-14 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" max="100" />
+                                            <span className="text-xs text-slate-400">→</span>
+                                            <input type="number" value={b.gpa} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], gpa: Number(e.target.value)}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="w-12 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" step="0.5" />
+                                            <input type="text" value={b.letter || ''} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], letter: e.target.value}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="w-12 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" placeholder="Ltr" />
+                                            <input type="text" value={b.label || ''} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], label: e.target.value}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="flex-1 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs" placeholder="Label" />
+                                            <button onClick={() => { const bs = schemeModal.boundaries.filter((_, i) => i !== idx); setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="text-rose-400 text-xs p-0.5">✕</button>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => setSchemeModal({...schemeModal, boundaries: [...(schemeModal.boundaries || []), { minPercent: 0, gpa: 0, letter: '', label: '' }]})}
+                                        className="w-full py-1 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600">+ Add Boundary</button>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 mt-4">
+                                <button onClick={() => setSchemeModal(null)} className="flex-1 py-2 bg-slate-800 rounded-lg text-white text-sm">Cancel</button>
+                                <button onClick={() => {
+                                    if (!schemeModal.name.trim()) { showToast('Name required', 'error'); return; }
+                                    const sorted = [...(schemeModal.boundaries || [])].sort((a, b) => b.minPercent - a.minPercent);
+                                    const scheme = { ...schemeModal, boundaries: sorted, id: schemeModal.id || crypto.randomUUID() };
+                                    if (schemes.find(s => s.id === scheme.id)) dispatch({ type: ActionTypes.UPDATE_GRADING_SCHEME, payload: scheme });
+                                    else dispatch({ type: ActionTypes.ADD_GRADING_SCHEME, payload: scheme });
+                                    setSchemeModal(null); showToast('Scheme saved', 'success');
+                                }} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* ===== Template Editor Modal ===== */}
+                {templateModal && (
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setTemplateModal(null)}>
+                        <div className="w-full max-w-lg mx-4 bg-slate-900 rounded-t-2xl sm:rounded-2xl p-5 border border-slate-700 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold text-white mb-3">{templateModal.id ? 'Edit Template' : 'New Template'}</h3>
+                            <div className="space-y-3">
+                                <input type="text" value={templateModal.name} onChange={e => setTemplateModal({...templateModal, name: e.target.value})} placeholder="Template name"
+                                    className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                                <div className="text-xs font-medium text-slate-300">Components</div>
+                                {(() => {
+                                    const totalW = (templateModal.components || []).reduce((s, c) => s + (c.weight || 0), 0);
+                                    return (
+                                        <div className="space-y-1">
+                                            {(templateModal.components || []).map((comp, idx) => (
+                                                <div key={comp.key || idx} className="flex items-center gap-1">
+                                                    <input type="text" value={comp.name} onChange={e => { const cs = [...templateModal.components]; cs[idx] = {...cs[idx], name: e.target.value}; setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="flex-1 px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs" placeholder="Name" />
+                                                    <input type="text" value={comp.type} onChange={e => { const cs = [...templateModal.components]; cs[idx] = {...cs[idx], type: e.target.value}; setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="w-24 px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs" placeholder="Type" />
+                                                    <input type="number" value={comp.weight} onChange={e => { const cs = [...templateModal.components]; cs[idx] = {...cs[idx], weight: Number(e.target.value)}; setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="w-14 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" max="100" />
+                                                    <button onClick={() => { const cs = templateModal.components.filter((_, i) => i !== idx); setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="text-rose-400 text-xs p-0.5">✕</button>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-between text-xs">
+                                                <button onClick={() => setTemplateModal({...templateModal, components: [...(templateModal.components || []), { key: crypto.randomUUID(), name: '', type: 'Custom', weight: 0 }]})}
+                                                    className="py-1 px-2 text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600">+ Add Component</button>
+                                                <span className={totalW === 100 ? 'text-emerald-400' : 'text-amber-400'}>Total: {totalW}% {totalW !== 100 ? '⚠️' : '✅'}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                            <div className="flex gap-2 mt-4">
+                                <button onClick={() => setTemplateModal(null)} className="flex-1 py-2 bg-slate-800 rounded-lg text-white text-sm">Cancel</button>
+                                <button onClick={() => {
+                                    if (!templateModal.name.trim()) { showToast('Name required', 'error'); return; }
+                                    const tmpl = { ...templateModal, id: templateModal.id || crypto.randomUUID() };
+                                    if (templates.find(t => t.id === tmpl.id)) dispatch({ type: ActionTypes.UPDATE_GRADE_TEMPLATE, payload: tmpl });
+                                    else dispatch({ type: ActionTypes.ADD_GRADE_TEMPLATE, payload: tmpl });
+                                    setTemplateModal(null); showToast('Template saved', 'success');
+                                }} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Save</button>
                             </div>
                         </div>
                     </div>
