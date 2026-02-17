@@ -2408,7 +2408,8 @@
                 if (!card) return state;
                 
                 const now = new Date();
-                const learningSteps = [10, 1440]; // minutes
+                const deck = (state.flashcards?.decks || []).find(d => d.id === card.deckId);
+                const learningSteps = deck?.settings?.learningStepsMins || [10, 1440]; // minutes
                 let newCard = { ...card };
                 
                 if (card.state === 'new') {
@@ -9778,6 +9779,33 @@
         // Keyboard shortcuts
         useKeyboardShortcuts(dispatch, state);
         
+        // Auto-end focus mode when time expires
+        useEffect(() => {
+            const fm = state.focusMode;
+            if (fm?.mode && fm.mode !== 'off' && fm.endsAt) {
+                const remaining = new Date(fm.endsAt) - new Date();
+                if (remaining <= 0) {
+                    dispatch({ type: ActionTypes.END_DEEP_WORK });
+                    showToast('Focus session ended');
+                } else {
+                    const timer = setTimeout(() => {
+                        dispatch({ type: ActionTypes.END_DEEP_WORK });
+                        showToast('Focus session complete! 🎉', 'success');
+                    }, remaining);
+                    return () => clearTimeout(timer);
+                }
+            }
+        }, [state.focusMode?.endsAt, state.focusMode?.mode, dispatch]);
+        
+        // Update focus banner every second (for countdown display)
+        const [, setTick] = useState(0);
+        useEffect(() => {
+            if (state.focusMode?.mode && state.focusMode.mode !== 'off' && state.focusMode?.endsAt) {
+                const interval = setInterval(() => setTick(t => t + 1), 1000);
+                return () => clearInterval(interval);
+            }
+        }, [state.focusMode?.mode, state.focusMode?.endsAt]);
+        
         // View components
         const viewComponents = {
             dashboard: DashboardPage,
@@ -9860,7 +9888,7 @@
                                         aria-label="Notifications"
                                     >
                                         <span className="text-lg">🔔</span>
-                                        {(state.notifications || []).filter(n => !n.read).length > 0 && !(state.focusMode?.mode !== 'off' && state.focusMode?.mode) && (
+                                        {(state.notifications || []).filter(n => !n.read).length > 0 && (!state.focusMode?.mode || state.focusMode?.mode === 'off') && (
                                             <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 rounded-full text-xs text-white flex items-center justify-center">
                                                 {(state.notifications || []).filter(n => !n.read).length}
                                             </span>
@@ -9931,10 +9959,6 @@
                         const remaining = Math.max(0, Math.floor((new Date(state.focusMode.endsAt) - new Date()) / 1000));
                         const mins = Math.floor(remaining / 60);
                         const secs = remaining % 60;
-                        if (remaining <= 0 && state.focusMode.mode !== 'off') {
-                            // Auto-end focus when time is up
-                            setTimeout(() => dispatch({ type: ActionTypes.END_DEEP_WORK }), 100);
-                        }
                         return remaining > 0 ? (
                             <div className="bg-gradient-to-r from-violet-600/90 to-indigo-600/90 px-4 py-2 flex items-center justify-between">
                                 <div className="flex items-center gap-2">
