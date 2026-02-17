@@ -961,6 +961,20 @@
         isToday: (dateKey) => dateKey === DateUtils.toKey(),
         
         /**
+         * Parse a YYYY-MM-DD date string safely (noon to avoid timezone shifts)
+         * @param {string} dateKey - ISO date string
+         * @returns {Date}
+         */
+        parseKey: (dateKey) => new Date(dateKey + 'T12:00:00'),
+        
+        /**
+         * Format a Date object to YYYY-MM-DD key
+         * @param {Date} date - Date object
+         * @returns {string}
+         */
+        dateToKey: (date) => `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`,
+        
+        /**
          * Get day of week (0 = Sunday, 6 = Saturday)
          * @param {string} dateKey - ISO date string
          * @returns {number}
@@ -8859,7 +8873,7 @@
                 }
             });
             // Timetable (check day of week)
-            const dayOfWeek = new Date(dateKey + 'T12:00:00').getDay();
+            const dayOfWeek = DateUtils.parseKey(dateKey).getDay();
             const dayMap = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
             (state.timetable || []).forEach(t => {
                 if ((t.days || [t.day]).includes(dayMap[dayOfWeek])) {
@@ -8988,7 +9002,7 @@
             : currentDate.toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' });
         
         // Day view: get events for current date
-        const dayViewDateKey = `${currentDate.getFullYear()}-${String(currentDate.getMonth() + 1).padStart(2, '0')}-${String(currentDate.getDate()).padStart(2, '0')}`;
+        const dayViewDateKey = DateUtils.dateToKey(currentDate);
         const dayViewEvents = viewMode === 'day' ? getEventsForDay(dayViewDateKey) : [];
         
         return (
@@ -9073,7 +9087,7 @@
                 {viewMode === 'week' && (
                     <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-3 space-y-2">
                         {weekDates.map(date => {
-                            const dateKey = `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+                            const dateKey = DateUtils.dateToKey(date);
                             const events = getEventsForDay(dateKey);
                             const isToday = dateKey === today;
                             const isSelected = selectedDay === dateKey;
@@ -9155,7 +9169,7 @@
                         <h3 className="font-bold text-white mb-3">
                             {viewMode === 'month' 
                                 ? `${monthNames[currentMonth]} ${selectedDay}, ${currentYear}`
-                                : new Date(selectedDay + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
+                                : DateUtils.parseKey(selectedDay).toLocaleDateString('en-US', { weekday: 'long', month: 'long', day: 'numeric' })
                             }
                         </h3>
                         {selectedEvents.length === 0 ? (
@@ -9729,7 +9743,7 @@
                             <div className="space-y-2">
                                 {forecast.map(day => (
                                     <div key={day.date} className="flex items-center gap-3">
-                                        <span className="text-xs text-slate-400 w-20">{new Date(day.date + 'T12:00:00').toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
+                                        <span className="text-xs text-slate-400 w-20">{DateUtils.parseKey(day.date).toLocaleDateString('en-US', { weekday: 'short', month: 'short', day: 'numeric' })}</span>
                                         <div className="flex-1 bg-slate-700 rounded-full h-4 overflow-hidden">
                                             <div className="h-full bg-indigo-500 rounded-full transition-all"
                                                 style={{ width: `${Math.min(100, (day.count / Math.max(1, ...forecast.map(f => f.count))) * 100)}%` }} />
