@@ -1987,6 +1987,43 @@
             semesters: [] // { id, name, courses: [{ id, name, creditHours, assessments: [{ id, name, type, componentWeight, weight, score, maxScore }] }] }
         },
         
+        // ===== Grading Schemes & Templates =====
+        grading: {
+            activeSchemeId: 'default-india-10',
+            schemes: [
+                {
+                    id: 'default-india-10',
+                    name: 'India 10-point (default)',
+                    scaleMax: 10,
+                    rounding: { mode: 'fixed', decimals: 2 },
+                    boundaries: [
+                        { minPercent: 90, gpa: 10, letter: 'O', label: 'Excellent' },
+                        { minPercent: 80, gpa: 9,  letter: 'A+', label: 'Very Good' },
+                        { minPercent: 70, gpa: 8,  letter: 'A',  label: 'Good' },
+                        { minPercent: 60, gpa: 7,  letter: 'B+', label: 'Above Avg' },
+                        { minPercent: 50, gpa: 6,  letter: 'B',  label: 'Avg' },
+                        { minPercent: 40, gpa: 5,  letter: 'C',  label: 'Pass' },
+                        { minPercent: 0,  gpa: 0,  letter: 'F',  label: 'Fail' }
+                    ]
+                }
+            ],
+            templates: [
+                {
+                    id: 'template-default',
+                    name: 'Default Components',
+                    components: [
+                        { key: 'ct1', name: 'Class Test 1', type: 'Class Test', weight: 10 },
+                        { key: 'ct2', name: 'Class Test 2', type: 'Class Test', weight: 10 },
+                        { key: 'a1',  name: 'Assignment 1', type: 'Assignment', weight: 5 },
+                        { key: 'a2',  name: 'Assignment 2', type: 'Assignment', weight: 5 },
+                        { key: 'mid', name: 'Mid Semester', type: 'Mid Semester', weight: 30 },
+                        { key: 'end', name: 'End Semester', type: 'End Semester', weight: 40 },
+                        { key: 'att', name: 'Attendance',   type: 'Attendance', weight: 0 }
+                    ]
+                }
+            ]
+        },
+        
         // ===== Notifications =====
         notifications: [], // { id, type, title, message, read, createdAt, actionLink: { tab, subTab } }
         
@@ -2109,6 +2146,15 @@
         ADD_ASSESSMENT: 'ADD_ASSESSMENT',
         UPDATE_ASSESSMENT: 'UPDATE_ASSESSMENT',
         DELETE_ASSESSMENT: 'DELETE_ASSESSMENT',
+        
+        // Grading Schemes & Templates
+        SET_ACTIVE_GRADING_SCHEME: 'SET_ACTIVE_GRADING_SCHEME',
+        ADD_GRADING_SCHEME: 'ADD_GRADING_SCHEME',
+        UPDATE_GRADING_SCHEME: 'UPDATE_GRADING_SCHEME',
+        DELETE_GRADING_SCHEME: 'DELETE_GRADING_SCHEME',
+        ADD_GRADE_TEMPLATE: 'ADD_GRADE_TEMPLATE',
+        UPDATE_GRADE_TEMPLATE: 'UPDATE_GRADE_TEMPLATE',
+        DELETE_GRADE_TEMPLATE: 'DELETE_GRADE_TEMPLATE',
         
         // Notifications
         ADD_NOTIFICATION: 'ADD_NOTIFICATION',
@@ -2908,6 +2954,29 @@
                 };
             }
             
+            // ===== GRADING SCHEMES & TEMPLATES =====
+            case ActionTypes.SET_ACTIVE_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, activeSchemeId: payload } };
+            }
+            case ActionTypes.ADD_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, schemes: [...(state.grading?.schemes || []), payload] } };
+            }
+            case ActionTypes.UPDATE_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, schemes: (state.grading?.schemes || []).map(s => s.id === payload.id ? { ...s, ...payload } : s) } };
+            }
+            case ActionTypes.DELETE_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, schemes: (state.grading?.schemes || []).filter(s => s.id !== payload) } };
+            }
+            case ActionTypes.ADD_GRADE_TEMPLATE: {
+                return { ...state, grading: { ...state.grading, templates: [...(state.grading?.templates || []), payload] } };
+            }
+            case ActionTypes.UPDATE_GRADE_TEMPLATE: {
+                return { ...state, grading: { ...state.grading, templates: (state.grading?.templates || []).map(t => t.id === payload.id ? { ...t, ...payload } : t) } };
+            }
+            case ActionTypes.DELETE_GRADE_TEMPLATE: {
+                return { ...state, grading: { ...state.grading, templates: (state.grading?.templates || []).filter(t => t.id !== payload) } };
+            }
+            
             // ===== NOTIFICATIONS =====
             case ActionTypes.ADD_NOTIFICATION: {
                 return {
@@ -3051,6 +3120,10 @@
                     if (!parsed.grades) parsed.grades = { semesters: [] };
                     if (!parsed.notifications) parsed.notifications = [];
                     if (!parsed._version) parsed._version = '3.0.0';
+                    // Migrate grading schemes & templates
+                    if (!parsed.grading) {
+                        parsed.grading = createInitialState().grading;
+                    }
                     // Migrate subjects from string array to object array (only once)
                     if (parsed.subjects && parsed.subjects.length > 0 && typeof parsed.subjects[0] === 'string') {
                         parsed.subjects = parsed.subjects.map((name, idx) => ({
