@@ -229,7 +229,7 @@
      */
     const CONFIG = Object.freeze({
         APP_NAME: 'StudentOS',
-        VERSION: '3.0.0',
+        VERSION: '4.0.0',
         STORAGE_KEY: 'studentos-v3',
         MAX_UNDO_STACK: 30,
         DEBOUNCE_MS: 500,
@@ -276,6 +276,161 @@
             verySad: '😢'
         }),
     });
+
+    // ============================================================================
+    // SECTION 1B: INDEXEDDB DATA LAYER
+    // ============================================================================
+
+    /**
+     * Lightweight IndexedDB wrapper with schema versioning and integrity checks
+     */
+    const StudentDB = (() => {
+        const DB_NAME = 'studentos';
+        const DB_VERSION = 1;
+        const STORE_NAME = 'appState';
+        const BACKUP_STORE = 'backups';
+        
+        let dbInstance = null;
+        
+        function open() {
+            if (dbInstance) return Promise.resolve(dbInstance);
+            return new Promise((resolve, reject) => {
+                const request = indexedDB.open(DB_NAME, DB_VERSION);
+                request.onupgradeneeded = (event) => {
+                    const db = event.target.result;
+                    if (!db.objectStoreNames.contains(STORE_NAME)) {
+                        db.createObjectStore(STORE_NAME);
+                    }
+                    if (!db.objectStoreNames.contains(BACKUP_STORE)) {
+                        const backupStore = db.createObjectStore(BACKUP_STORE, { keyPath: 'id' });
+                        backupStore.createIndex('timestamp', 'timestamp');
+                    }
+                };
+                request.onsuccess = (event) => {
+                    dbInstance = event.target.result;
+                    resolve(dbInstance);
+                };
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+        
+        async function saveState(state) {
+            const db = await open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readwrite');
+                const store = tx.objectStore(STORE_NAME);
+                const data = { ...state, _checksum: computeChecksum(state), _savedAt: new Date().toISOString() };
+                store.put(data, 'current');
+                tx.oncomplete = () => resolve();
+                tx.onerror = (event) => reject(event.target.error);
+            });
+        }
+        
+        async function loadState() {
+            const db = await open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(STORE_NAME, 'readonly');
+                const store = tx.objectStore(STORE_NAME);
+                const request = store.get('current');
+                request.onsuccess = () => resolve(request.result || null);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+        
+        async function createBackup(state) {
+            const db = await open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(BACKUP_STORE, 'readwrite');
+                const store = tx.objectStore(BACKUP_STORE);
+                const backup = {
+                    id: `backup-${Date.now()}`,
+                    timestamp: new Date().toISOString(),
+                    state: state
+                };
+                store.put(backup);
+                // Keep only last 5 backups, deleting oldest first using timestamp index
+                const countReq = store.count();
+                countReq.onsuccess = () => {
+                    if (countReq.result > 5) {
+                        const idx = store.index('timestamp');
+                        const cursorReq = idx.openCursor(null, 'next');
+                        let deleteCount = countReq.result - 5;
+                        cursorReq.onsuccess = (event) => {
+                            const cursor = event.target.result;
+                            if (cursor && deleteCount > 0) {
+                                cursor.delete();
+                                deleteCount--;
+                                cursor.continue();
+                            }
+                        };
+                    }
+                };
+                tx.oncomplete = () => resolve();
+                tx.onerror = (event) => reject(event.target.error);
+            });
+        }
+        
+        async function listBackups() {
+            const db = await open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(BACKUP_STORE, 'readonly');
+                const store = tx.objectStore(BACKUP_STORE);
+                const request = store.getAll();
+                request.onsuccess = () => resolve(request.result || []);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+        
+        async function restoreBackup(backupId) {
+            const db = await open();
+            return new Promise((resolve, reject) => {
+                const tx = db.transaction(BACKUP_STORE, 'readonly');
+                const store = tx.objectStore(BACKUP_STORE);
+                const request = store.get(backupId);
+                request.onsuccess = () => resolve(request.result?.state || null);
+                request.onerror = (event) => reject(event.target.error);
+            });
+        }
+        
+        async function migrateFromLocalStorage() {
+            try {
+                const saved = localStorage.getItem('studentos-v3');
+                if (!saved) {
+                    const v2 = localStorage.getItem('studentos-v2');
+                    if (v2) return JSON.parse(v2);
+                    return null;
+                }
+                return JSON.parse(saved);
+            } catch (e) {
+                console.error('Migration from localStorage failed:', e);
+                return null;
+            }
+        }
+        
+        function computeChecksum(state) {
+            // Simple checksum: count of key data points for integrity
+            const counts = [
+                (state.habits ? Object.keys(state.habits).length : 0),
+                (state.studySessions || []).length,
+                (state.assignments || []).length,
+                (state.expenses || []).length,
+                (state.journalEntries || []).length,
+                (state.goals || []).length,
+                (state.timetable || []).length,
+                (state.flashcardDecks || []).length,
+            ];
+            return counts.join('-');
+        }
+        
+        function verifyIntegrity(state) {
+            if (!state || typeof state !== 'object') return false;
+            // Ensure critical fields exist
+            const requiredFields = ['habits', 'settings'];
+            return requiredFields.every(field => field in state);
+        }
+        
+        return { open, saveState, loadState, createBackup, listBackups, restoreBackup, migrateFromLocalStorage, verifyIntegrity, computeChecksum };
+    })();
 
     // ============================================================================
     // MOTIVATIONAL QUOTES (50+)
@@ -1984,9 +2139,9 @@
         
         // Meta
         lastSyncedAt: null,
-        _version: '3.0.0',
+        _version: '4.0.0',
         _lastSaved: new Date().toISOString(),
-        appVersion: '3.0.0'
+        appVersion: '4.0.0'
     });
 
     /**
@@ -2924,11 +3079,11 @@
      */
     function usePersistedState(state, isLoading) {
         const timeoutRef = useRef(null);
+        const saveCountRef = useRef(0);
         
         useEffect(() => {
             if (isLoading) return;
             
-            // Debounce writes
             if (timeoutRef.current) {
                 clearTimeout(timeoutRef.current);
             }
@@ -2936,14 +3091,11 @@
             timeoutRef.current = setTimeout(() => {
                 try {
                     const toSave = {
-                        // Existing fields
                         habits: state.habits,
                         habitOrder: state.habitOrder,
                         settings: state.settings,
                         streakFreezes: state.streakFreezes,
                         totalPoints: state.totalPoints,
-                        
-                        // New fields for StudentOS
                         studySessions: state.studySessions,
                         studyGoal: state.studyGoal,
                         subjects: state.subjects,
@@ -2966,21 +3118,32 @@
                         achievements: state.achievements,
                         dailyChallenges: state.dailyChallenges,
                         appVersion: state.appVersion,
-                        _version: state._version || '3.0.0',
+                        _version: state._version || '4.0.0',
                         _lastSaved: new Date().toISOString(),
-                        
-                        // Grades
                         grades: state.grades,
-                        
-                        // Notifications
                         notifications: state.notifications,
-                        
-                        // Cognitive Command Center extensions
                         researchLog: state.researchLog,
                         skillXP: state.skillXP,
-                        researchMilestones: state.researchMilestones
+                        researchMilestones: state.researchMilestones,
+                        flashcardDecks: state.flashcardDecks,
+                        flashcardStats: state.flashcardStats,
+                        studyPlan: state.studyPlan,
                     };
-                    localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(toSave));
+                    // Primary: IndexedDB
+                    StudentDB.saveState(toSave).catch(err => {
+                        console.warn('IndexedDB save failed, using localStorage fallback:', err);
+                    });
+                    // Fallback: localStorage (for older browsers)
+                    try {
+                        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(toSave));
+                    } catch (lsErr) {
+                        console.warn('localStorage fallback save failed:', lsErr);
+                    }
+                    // Auto-backup every 20 saves
+                    saveCountRef.current++;
+                    if (saveCountRef.current % 20 === 0) {
+                        StudentDB.createBackup(toSave).catch(err => console.warn('Auto-backup failed:', err));
+                    }
                 } catch (e) {
                     console.error('Failed to persist state:', e);
                 }
@@ -2995,48 +3158,81 @@
     }
 
     /**
-     * Load state from localStorage on mount
+     * Load state from IndexedDB on mount, with localStorage fallback
      */
     function useLoadState(dispatch) {
         useEffect(() => {
-            try {
-                let saved = localStorage.getItem(CONFIG.STORAGE_KEY);
-                
-                // Try loading from previous version storage key for migration
-                if (!saved) {
-                    saved = localStorage.getItem('studentos-v2');
-                    if (saved) {
-                        // Migrate: save under new key and remove old
-                        localStorage.setItem(CONFIG.STORAGE_KEY, saved);
+            (async () => {
+                try {
+                    // Try IndexedDB first
+                    let data = await StudentDB.loadState();
+                    
+                    // If no IndexedDB data, migrate from localStorage
+                    if (!data) {
+                        data = await StudentDB.migrateFromLocalStorage();
+                        if (data) {
+                            // Save migrated data to IndexedDB
+                            await StudentDB.saveState(data);
+                            StudentDB.createBackup(data).catch(err => console.warn('Backup after migration failed:', err));
+                            console.log('Migrated data from localStorage to IndexedDB');
+                        }
+                    }
+                    
+                    // Verify integrity, iterate backups to find a valid one
+                    if (data && !StudentDB.verifyIntegrity(data)) {
+                        console.warn('Data integrity check failed, attempting backup restore');
+                        const backups = await StudentDB.listBackups();
+                        let restored = false;
+                        for (let i = backups.length - 1; i >= 0; i--) {
+                            if (StudentDB.verifyIntegrity(backups[i].state)) {
+                                data = backups[i].state;
+                                restored = true;
+                                break;
+                            }
+                        }
+                        if (!restored) {
+                            console.warn('No valid backup found, starting fresh');
+                            data = null;
+                        }
+                    }
+                    
+                    if (data) {
+                        // Forward migration for new fields
+                        if (!data.grades) data.grades = { semesters: [] };
+                        if (!data.notifications) data.notifications = [];
+                        if (!data.flashcardDecks) data.flashcardDecks = [];
+                        if (!data.flashcardStats) data.flashcardStats = {};
+                        if (!data.studyPlan) data.studyPlan = { weeklyPlan: [], lastGenerated: null };
+                        if (!data._version) data._version = '4.0.0';
+                        // Migrate subjects from string array to object array
+                        if (data.subjects && data.subjects.length > 0 && typeof data.subjects[0] === 'string') {
+                            data.subjects = data.subjects.map((name, idx) => ({
+                                id: `subj-migrated-${idx}`,
+                                name,
+                                color: Object.keys(CONFIG.COLORS)[idx % Object.keys(CONFIG.COLORS).length],
+                                icon: '📘',
+                                weeklyGoalHours: 5
+                            }));
+                        }
+                        dispatch({ type: ActionTypes.LOAD_STATE, payload: data });
+                    } else {
+                        dispatch({ type: ActionTypes.SET_LOADING, payload: false });
+                    }
+                } catch (e) {
+                    console.error('Failed to load state:', e);
+                    // Final fallback: try localStorage directly
+                    try {
+                        const saved = localStorage.getItem(CONFIG.STORAGE_KEY);
+                        if (saved) {
+                            dispatch({ type: ActionTypes.LOAD_STATE, payload: JSON.parse(saved) });
+                        } else {
+                            dispatch({ type: ActionTypes.SET_LOADING, payload: false });
+                        }
+                    } catch (lsErr) {
+                        dispatch({ type: ActionTypes.SET_LOADING, payload: false });
                     }
                 }
-                
-                if (saved) {
-                    const parsed = JSON.parse(saved);
-                    // Ensure new fields exist for forward migration
-                    if (!parsed.grades) parsed.grades = { semesters: [] };
-                    if (!parsed.notifications) parsed.notifications = [];
-                    if (!parsed._version) parsed._version = '3.0.0';
-                    // Migrate subjects from string array to object array (only once)
-                    if (parsed.subjects && parsed.subjects.length > 0 && typeof parsed.subjects[0] === 'string') {
-                        parsed.subjects = parsed.subjects.map((name, idx) => ({
-                            id: `subj-migrated-${idx}`,
-                            name,
-                            color: Object.keys(CONFIG.COLORS)[idx % Object.keys(CONFIG.COLORS).length],
-                            icon: '📘',
-                            weeklyGoalHours: 5
-                        }));
-                        // Re-save immediately to persist migration
-                        localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify({ ...parsed, _version: '3.0.0' }));
-                    }
-                    dispatch({ type: ActionTypes.LOAD_STATE, payload: parsed });
-                } else {
-                    dispatch({ type: ActionTypes.SET_LOADING, payload: false });
-                }
-            } catch (e) {
-                console.error('Failed to load state:', e);
-                dispatch({ type: ActionTypes.SET_LOADING, payload: false });
-            }
+            })();
         }, [dispatch]);
     }
 
