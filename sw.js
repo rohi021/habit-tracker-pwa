@@ -1,4 +1,4 @@
-const CACHE_VERSION = 'studentos-v3.0';
+const CACHE_VERSION = 'studentos-v4.0';
 const OFFLINE_URL = '/index.html';
 
 const ASSETS_TO_CACHE = [
