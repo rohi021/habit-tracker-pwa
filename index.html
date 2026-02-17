@@ -505,6 +505,40 @@
         format: (date, options = { month: 'short', day: 'numeric' }) => {
             const d = typeof date === 'string' ? new Date(date) : date;
             return d.toLocaleDateString('en-US', options);
+        },
+
+        /**
+         * Parse a YYYY-MM-DD key to a Date at noon (avoids timezone shifts)
+         * @param {string} dateKey
+         * @returns {Date}
+         */
+        parseKey: (dateKey) => new Date(dateKey + 'T12:00:00'),
+
+        /**
+         * Add N days to a date (returns new Date)
+         * @param {Date} date
+         * @param {number} n
+         * @returns {Date}
+         */
+        addDays: (date, n) => {
+            const d = new Date(date);
+            d.setDate(d.getDate() + n);
+            return d;
+        },
+
+        /**
+         * Get start of week for a given date
+         * @param {Date} date
+         * @param {number} weekStartsOn - 0=Sunday, 1=Monday
+         * @returns {Date}
+         */
+        startOfWeek: (date, weekStartsOn = 0) => {
+            const d = new Date(date);
+            const day = d.getDay();
+            const diff = (day - weekStartsOn + 7) % 7;
+            d.setDate(d.getDate() - diff);
+            d.setHours(0, 0, 0, 0);
+            return d;
         }
     };
 
@@ -1893,19 +1927,34 @@
         selectedHabit: null,
         isLoading: true,
         
-        // Focus mode (existing - now part of study)
+        // Focus mode (enhanced - supports deep work)
         focusMode: {
             active: false,
             habitId: null,
             startTime: null,
-            duration: 25 * 60 // 25 minutes default
+            duration: 25 * 60, // 25 minutes default
+            mode: 'off', // 'off' | 'deepWork' | 'studyOnly'
+            endsAt: null,
+            silenceNotifications: true,
+            hideTabs: ['analytics', 'journal', 'expenses', 'settings']
         },
         
         // ===== NEW: Study Session Tracker =====
         studySessions: [], // { id, subject, startTime, endTime, duration, notes, date, type: 'regular'|'pomodoro' }
         studyGoal: { daily: 120, weekly: 600 }, // minutes
         subjects: [], // User-created subject list - SINGLE SOURCE OF TRUTH
-        activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime }
+        activeStudySession: null, // { subject, startTime, type, pomodoroCount, breakStartTime, topicId }
+        
+        // ===== Flashcards (Spaced Repetition) =====
+        flashcards: {
+            decks: [], // [{ id, subjectId, name, createdAt, settings: { newPerDay, reviewPerDay, learningStepsMins, easeFactorBase } }]
+            cards: [], // [{ id, deckId, subjectId, front, back, tags, topicId, createdAt, updatedAt, suspended, state, dueAt, intervalDays, easeFactor, reps, lapses, lastReviewedAt }]
+            reviews: [], // [{ id, cardId, deckId, subjectId, reviewedAt, grade, timeMs }]
+            ui: { activeDeckId: null }
+        },
+        
+        // ===== Topics (per-subject chapters/units) =====
+        topics: [], // [{ id, subjectId, title, notes, order, plannedHours, progress, createdAt, updatedAt }]
         
         // ===== NEW: Assignments & Exams =====
         assignments: [], // { id, title, subject, dueDate, priority, status, grade, type: 'assignment'|'exam', prepProgress, topics, createdAt }
@@ -1953,6 +2002,43 @@
             semesters: [] // { id, name, courses: [{ id, name, creditHours, assessments: [{ id, name, type, componentWeight, weight, score, maxScore }] }] }
         },
         
+        // ===== Grading Schemes & Templates =====
+        grading: {
+            activeSchemeId: 'default-india-10',
+            schemes: [
+                {
+                    id: 'default-india-10',
+                    name: 'India 10-point (default)',
+                    scaleMax: 10,
+                    rounding: { mode: 'fixed', decimals: 2 },
+                    boundaries: [
+                        { minPercent: 90, gpa: 10, letter: 'O', label: 'Excellent' },
+                        { minPercent: 80, gpa: 9,  letter: 'A+', label: 'Very Good' },
+                        { minPercent: 70, gpa: 8,  letter: 'A',  label: 'Good' },
+                        { minPercent: 60, gpa: 7,  letter: 'B+', label: 'Above Avg' },
+                        { minPercent: 50, gpa: 6,  letter: 'B',  label: 'Avg' },
+                        { minPercent: 40, gpa: 5,  letter: 'C',  label: 'Pass' },
+                        { minPercent: 0,  gpa: 0,  letter: 'F',  label: 'Fail' }
+                    ]
+                }
+            ],
+            templates: [
+                {
+                    id: 'template-default',
+                    name: 'Default Components',
+                    components: [
+                        { key: 'ct1', name: 'Class Test 1', type: 'Class Test', weight: 10 },
+                        { key: 'ct2', name: 'Class Test 2', type: 'Class Test', weight: 10 },
+                        { key: 'a1',  name: 'Assignment 1', type: 'Assignment', weight: 5 },
+                        { key: 'a2',  name: 'Assignment 2', type: 'Assignment', weight: 5 },
+                        { key: 'mid', name: 'Mid Semester', type: 'Mid Semester', weight: 30 },
+                        { key: 'end', name: 'End Semester', type: 'End Semester', weight: 40 },
+                        { key: 'att', name: 'Attendance',   type: 'Attendance', weight: 0 }
+                    ]
+                }
+            ]
+        },
+        
         // ===== Notifications =====
         notifications: [], // { id, type, title, message, read, createdAt, actionLink: { tab, subTab } }
         
@@ -1986,7 +2072,40 @@
         lastSyncedAt: null,
         _version: '3.0.0',
         _lastSaved: new Date().toISOString(),
-        appVersion: '3.0.0'
+        appVersion: '3.0.0',
+        
+        // ===== Wellness Insights =====
+        wellnessInsights: {
+            rulesEnabled: true,
+            thresholds: {
+                weeklySleepDebtHours: 5,
+                burnoutRisingDelta: 0.12,
+                studyLoadIncreasePct: 25,
+                consecutiveLowMoodDays: 3
+            },
+            lastEvaluatedAt: null,
+            dismissed: {}
+        },
+        
+        // ===== Routines =====
+        routines: {
+            items: [],
+            routineOrder: [],
+            completions: {}
+        },
+        
+        // ===== Cycle Tracking (optional) =====
+        cycle: {
+            enabled: false,
+            settings: {
+                averageCycleLength: 28,
+                averagePeriodLength: 5,
+                lutealLength: 14,
+                remindersEnabled: false
+            },
+            periods: [],
+            symptoms: {}
+        }
     });
 
     /**
@@ -2000,9 +2119,28 @@
         TOGGLE_HABIT: 'TOGGLE_HABIT',
         REORDER_HABITS: 'REORDER_HABITS',
         
-        // Focus mode (existing)
+        // Focus mode (enhanced)
         START_FOCUS: 'START_FOCUS',
         END_FOCUS: 'END_FOCUS',
+        START_DEEP_WORK: 'START_DEEP_WORK',
+        END_DEEP_WORK: 'END_DEEP_WORK',
+        
+        // Flashcards
+        ADD_DECK: 'ADD_DECK',
+        UPDATE_DECK: 'UPDATE_DECK',
+        DELETE_DECK: 'DELETE_DECK',
+        ADD_CARD: 'ADD_CARD',
+        UPDATE_CARD: 'UPDATE_CARD',
+        DELETE_CARD: 'DELETE_CARD',
+        TOGGLE_SUSPEND_CARD: 'TOGGLE_SUSPEND_CARD',
+        REVIEW_CARD: 'REVIEW_CARD',
+        SET_ACTIVE_DECK: 'SET_ACTIVE_DECK',
+        
+        // Topics
+        ADD_TOPIC: 'ADD_TOPIC',
+        UPDATE_TOPIC: 'UPDATE_TOPIC',
+        DELETE_TOPIC: 'DELETE_TOPIC',
+        REORDER_TOPIC: 'REORDER_TOPIC',
         
         // Study Session Tracker
         START_STUDY_SESSION: 'START_STUDY_SESSION',
@@ -2076,10 +2214,36 @@
         UPDATE_ASSESSMENT: 'UPDATE_ASSESSMENT',
         DELETE_ASSESSMENT: 'DELETE_ASSESSMENT',
         
+        // Grading Schemes & Templates
+        SET_ACTIVE_GRADING_SCHEME: 'SET_ACTIVE_GRADING_SCHEME',
+        ADD_GRADING_SCHEME: 'ADD_GRADING_SCHEME',
+        UPDATE_GRADING_SCHEME: 'UPDATE_GRADING_SCHEME',
+        DELETE_GRADING_SCHEME: 'DELETE_GRADING_SCHEME',
+        ADD_GRADE_TEMPLATE: 'ADD_GRADE_TEMPLATE',
+        UPDATE_GRADE_TEMPLATE: 'UPDATE_GRADE_TEMPLATE',
+        DELETE_GRADE_TEMPLATE: 'DELETE_GRADE_TEMPLATE',
+        
         // Notifications
         ADD_NOTIFICATION: 'ADD_NOTIFICATION',
         MARK_NOTIFICATION_READ: 'MARK_NOTIFICATION_READ',
         CLEAR_NOTIFICATIONS: 'CLEAR_NOTIFICATIONS',
+        
+        // Wellness Insights
+        DISMISS_INSIGHT_ALERT: 'DISMISS_INSIGHT_ALERT',
+        UPDATE_WELLNESS_INSIGHT_SETTINGS: 'UPDATE_WELLNESS_INSIGHT_SETTINGS',
+        
+        // Routines
+        ADD_ROUTINE: 'ADD_ROUTINE',
+        UPDATE_ROUTINE: 'UPDATE_ROUTINE',
+        DELETE_ROUTINE: 'DELETE_ROUTINE',
+        COMPLETE_ROUTINE_TODAY: 'COMPLETE_ROUTINE_TODAY',
+        
+        // Cycle Tracking
+        UPDATE_CYCLE_SETTINGS: 'UPDATE_CYCLE_SETTINGS',
+        LOG_PERIOD: 'LOG_PERIOD',
+        UPDATE_PERIOD: 'UPDATE_PERIOD',
+        DELETE_PERIOD: 'DELETE_PERIOD',
+        LOG_CYCLE_SYMPTOMS: 'LOG_CYCLE_SYMPTOMS',
         
         // UI
         SET_VIEW: 'SET_VIEW',
@@ -2207,6 +2371,7 @@
                 return {
                     ...state,
                     focusMode: {
+                        ...state.focusMode,
                         active: true,
                         habitId: payload.habitId,
                         startTime: Date.now(),
@@ -2219,12 +2384,171 @@
                 return {
                     ...state,
                     focusMode: {
+                        ...state.focusMode,
                         active: false,
                         habitId: null,
                         startTime: null,
-                        duration: 25 * 60
+                        duration: 25 * 60,
+                        mode: 'off',
+                        endsAt: null
                     }
                 };
+            }
+            
+            case ActionTypes.START_DEEP_WORK: {
+                const durationMs = (payload.durationMinutes || 50) * 60 * 1000;
+                return {
+                    ...state,
+                    focusMode: {
+                        ...state.focusMode,
+                        active: true,
+                        mode: payload.mode || 'deepWork',
+                        startTime: Date.now(),
+                        endsAt: new Date(Date.now() + durationMs).toISOString(),
+                        duration: (payload.durationMinutes || 50) * 60,
+                        silenceNotifications: true,
+                        hideTabs: payload.mode === 'studyOnly' ? ['analytics', 'journal', 'expenses', 'settings'] : ['analytics', 'journal', 'expenses', 'settings', 'matrix', 'command']
+                    }
+                };
+            }
+            
+            case ActionTypes.END_DEEP_WORK: {
+                return {
+                    ...state,
+                    focusMode: {
+                        active: false,
+                        habitId: null,
+                        startTime: null,
+                        duration: 25 * 60,
+                        mode: 'off',
+                        endsAt: null,
+                        silenceNotifications: true,
+                        hideTabs: ['analytics', 'journal', 'expenses', 'settings']
+                    }
+                };
+            }
+            
+            // ===== FLASHCARDS =====
+            case ActionTypes.ADD_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, decks: [...(state.flashcards?.decks || []), payload] } };
+            }
+            case ActionTypes.UPDATE_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, decks: (state.flashcards?.decks || []).map(d => d.id === payload.id ? { ...d, ...payload } : d) } };
+            }
+            case ActionTypes.DELETE_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, decks: (state.flashcards?.decks || []).filter(d => d.id !== payload), cards: (state.flashcards?.cards || []).filter(c => c.deckId !== payload), reviews: (state.flashcards?.reviews || []).filter(r => r.deckId !== payload) } };
+            }
+            case ActionTypes.ADD_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: [...(state.flashcards?.cards || []), payload] } };
+            }
+            case ActionTypes.UPDATE_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: (state.flashcards?.cards || []).map(c => c.id === payload.id ? { ...c, ...payload } : c) } };
+            }
+            case ActionTypes.DELETE_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: (state.flashcards?.cards || []).filter(c => c.id !== payload) } };
+            }
+            case ActionTypes.TOGGLE_SUSPEND_CARD: {
+                return { ...state, flashcards: { ...state.flashcards, cards: (state.flashcards?.cards || []).map(c => c.id === payload ? { ...c, suspended: !c.suspended } : c) } };
+            }
+            case ActionTypes.REVIEW_CARD: {
+                // payload: { cardId, grade (0-3), timeMs }
+                const { cardId, grade, timeMs } = payload;
+                const cards = state.flashcards?.cards || [];
+                const card = cards.find(c => c.id === cardId);
+                if (!card) return state;
+                
+                const now = new Date();
+                const deck = (state.flashcards?.decks || []).find(d => d.id === card.deckId);
+                const learningSteps = deck?.settings?.learningStepsMins || [10, 1440]; // minutes
+                let newCard = { ...card };
+                
+                if (card.state === 'new') {
+                    newCard.state = 'learning';
+                    newCard.reps = 0;
+                    newCard.dueAt = new Date(now.getTime() + learningSteps[0] * 60000).toISOString();
+                } else if (card.state === 'learning') {
+                    if (grade <= 0) {
+                        newCard.dueAt = new Date(now.getTime() + learningSteps[0] * 60000).toISOString();
+                        newCard.lapses = (newCard.lapses || 0) + 1;
+                    } else {
+                        const currentStep = learningSteps.findIndex(s => {
+                            const stepDue = new Date(now.getTime() + s * 60000);
+                            return card.dueAt && new Date(card.dueAt) <= stepDue;
+                        });
+                        const nextStep = Math.min((currentStep >= 0 ? currentStep : 0) + 1, learningSteps.length);
+                        if (nextStep >= learningSteps.length || grade >= 3) {
+                            newCard.state = 'review';
+                            newCard.intervalDays = grade >= 3 ? 4 : 1;
+                            newCard.dueAt = new Date(now.getTime() + newCard.intervalDays * 86400000).toISOString();
+                        } else {
+                            newCard.dueAt = new Date(now.getTime() + learningSteps[nextStep] * 60000).toISOString();
+                        }
+                    }
+                } else {
+                    // review state - SM-2 algorithm
+                    let ef = newCard.easeFactor || 2.5;
+                    let iv = newCard.intervalDays || 1;
+                    if (grade === 0) { ef = Math.max(1.3, ef - 0.2); iv = 1; newCard.lapses = (newCard.lapses || 0) + 1; }
+                    else if (grade === 1) { ef = Math.max(1.3, ef - 0.15); iv = Math.max(1, Math.round(iv * 1.2)); }
+                    else if (grade === 2) { iv = Math.max(1, Math.round(iv * ef)); }
+                    else { ef = ef + 0.15; iv = Math.max(1, Math.round(iv * ef * 1.3)); }
+                    newCard.easeFactor = ef;
+                    newCard.intervalDays = iv;
+                    newCard.dueAt = new Date(now.getTime() + iv * 86400000).toISOString();
+                }
+                
+                newCard.reps = (newCard.reps || 0) + 1;
+                newCard.lastReviewedAt = now.toISOString();
+                newCard.updatedAt = now.toISOString();
+                
+                const review = {
+                    id: crypto.randomUUID(),
+                    cardId,
+                    deckId: card.deckId,
+                    subjectId: card.subjectId,
+                    reviewedAt: now.toISOString(),
+                    grade,
+                    timeMs: timeMs || 0
+                };
+                
+                // XP: +1 per review, capped at 50/day
+                const todayKey = DateUtils.toKey();
+                const todayReviews = (state.flashcards?.reviews || []).filter(r => r.reviewedAt?.startsWith(todayKey)).length;
+                const xpGain = todayReviews < 50 ? 1 : 0;
+                
+                return {
+                    ...state,
+                    flashcards: {
+                        ...state.flashcards,
+                        cards: cards.map(c => c.id === cardId ? newCard : c),
+                        reviews: [...(state.flashcards?.reviews || []), review]
+                    },
+                    xp: (state.xp || 0) + xpGain
+                };
+            }
+            case ActionTypes.SET_ACTIVE_DECK: {
+                return { ...state, flashcards: { ...state.flashcards, ui: { ...(state.flashcards?.ui || {}), activeDeckId: payload } } };
+            }
+            
+            // ===== TOPICS =====
+            case ActionTypes.ADD_TOPIC: {
+                return { ...state, topics: [...(state.topics || []), payload] };
+            }
+            case ActionTypes.UPDATE_TOPIC: {
+                return { ...state, topics: (state.topics || []).map(t => t.id === payload.id ? { ...t, ...payload } : t) };
+            }
+            case ActionTypes.DELETE_TOPIC: {
+                return { ...state, topics: (state.topics || []).filter(t => t.id !== payload) };
+            }
+            case ActionTypes.REORDER_TOPIC: {
+                const { topicId: rtId, direction } = payload;
+                const topicsList = [...(state.topics || [])];
+                const idx = topicsList.findIndex(t => t.id === rtId);
+                if (idx < 0) return state;
+                const swapIdx = direction === 'up' ? idx - 1 : idx + 1;
+                if (swapIdx < 0 || swapIdx >= topicsList.length) return state;
+                [topicsList[idx], topicsList[swapIdx]] = [topicsList[swapIdx], topicsList[idx]];
+                return { ...state, topics: topicsList.map((t, i) => ({ ...t, order: i })) };
             }
             
             case ActionTypes.USE_STREAK_FREEZE: {
@@ -2306,7 +2630,8 @@
                     notes: payload?.notes || '',
                     date: DateUtils.toKey(),
                     type: state.activeStudySession.type,
-                    pomodoroCount: state.activeStudySession.pomodoroCount || 0
+                    pomodoroCount: state.activeStudySession.pomodoroCount || 0,
+                    topicId: state.activeStudySession.topicId || null
                 };
                 
                 const xpEarned = Math.floor(session.duration / 5) * 2; // 2 XP per 5 minutes
@@ -2874,6 +3199,29 @@
                 };
             }
             
+            // ===== GRADING SCHEMES & TEMPLATES =====
+            case ActionTypes.SET_ACTIVE_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, activeSchemeId: payload } };
+            }
+            case ActionTypes.ADD_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, schemes: [...(state.grading?.schemes || []), payload] } };
+            }
+            case ActionTypes.UPDATE_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, schemes: (state.grading?.schemes || []).map(s => s.id === payload.id ? { ...s, ...payload } : s) } };
+            }
+            case ActionTypes.DELETE_GRADING_SCHEME: {
+                return { ...state, grading: { ...state.grading, schemes: (state.grading?.schemes || []).filter(s => s.id !== payload) } };
+            }
+            case ActionTypes.ADD_GRADE_TEMPLATE: {
+                return { ...state, grading: { ...state.grading, templates: [...(state.grading?.templates || []), payload] } };
+            }
+            case ActionTypes.UPDATE_GRADE_TEMPLATE: {
+                return { ...state, grading: { ...state.grading, templates: (state.grading?.templates || []).map(t => t.id === payload.id ? { ...t, ...payload } : t) } };
+            }
+            case ActionTypes.DELETE_GRADE_TEMPLATE: {
+                return { ...state, grading: { ...state.grading, templates: (state.grading?.templates || []).filter(t => t.id !== payload) } };
+            }
+            
             // ===== NOTIFICATIONS =====
             case ActionTypes.ADD_NOTIFICATION: {
                 return {
@@ -2895,6 +3243,185 @@
                 return {
                     ...state,
                     notifications: []
+                };
+            }
+            
+            // ===== Wellness Insights =====
+            case ActionTypes.DISMISS_INSIGHT_ALERT: {
+                return {
+                    ...state,
+                    wellnessInsights: {
+                        ...state.wellnessInsights,
+                        dismissed: {
+                            ...(state.wellnessInsights?.dismissed || {}),
+                            [payload.alertId]: new Date().toISOString()
+                        }
+                    }
+                };
+            }
+            
+            case ActionTypes.UPDATE_WELLNESS_INSIGHT_SETTINGS: {
+                return {
+                    ...state,
+                    wellnessInsights: {
+                        ...state.wellnessInsights,
+                        ...payload
+                    }
+                };
+            }
+            
+            // ===== Routines =====
+            case ActionTypes.ADD_ROUTINE: {
+                const newRoutine = {
+                    id: `routine-${Date.now()}`,
+                    name: payload.name || 'New Routine',
+                    icon: payload.icon || '☀️',
+                    habitIds: payload.habitIds || [],
+                    createdAt: new Date().toISOString(),
+                    updatedAt: new Date().toISOString()
+                };
+                return {
+                    ...state,
+                    routines: {
+                        ...state.routines,
+                        items: [...(state.routines?.items || []), newRoutine],
+                        routineOrder: [...(state.routines?.routineOrder || []), newRoutine.id]
+                    }
+                };
+            }
+            
+            case ActionTypes.UPDATE_ROUTINE: {
+                return {
+                    ...state,
+                    routines: {
+                        ...state.routines,
+                        items: (state.routines?.items || []).map(r =>
+                            r.id === payload.id ? { ...r, ...payload, updatedAt: new Date().toISOString() } : r
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.DELETE_ROUTINE: {
+                return {
+                    ...state,
+                    routines: {
+                        ...state.routines,
+                        items: (state.routines?.items || []).filter(r => r.id !== payload.id),
+                        routineOrder: (state.routines?.routineOrder || []).filter(id => id !== payload.id)
+                    }
+                };
+            }
+            
+            case ActionTypes.COMPLETE_ROUTINE_TODAY: {
+                const todayKey = DateUtils.toKey();
+                const routine = (state.routines?.items || []).find(r => r.id === payload.routineId);
+                if (!routine) return state;
+                
+                // Mark all habits in routine as completed for today (atomically)
+                const newHabits = { ...state.habits };
+                const completedIds = [];
+                let xpGain = 0;
+                
+                routine.habitIds.forEach(hid => {
+                    const habit = newHabits[hid];
+                    if (habit && !habit.data?.[todayKey]) {
+                        newHabits[hid] = {
+                            ...habit,
+                            data: { ...habit.data, [todayKey]: true }
+                        };
+                        completedIds.push(hid);
+                        xpGain += 10;
+                    }
+                });
+                
+                const todayCompletions = state.routines?.completions?.[todayKey] || {};
+                const existingCompletion = todayCompletions[payload.routineId];
+                
+                return withUndo({
+                    ...state,
+                    habits: newHabits,
+                    totalPoints: state.totalPoints + xpGain,
+                    routines: {
+                        ...state.routines,
+                        completions: {
+                            ...(state.routines?.completions || {}),
+                            [todayKey]: {
+                                ...todayCompletions,
+                                [payload.routineId]: {
+                                    completedAt: new Date().toISOString(),
+                                    habitIdsCompleted: [...new Set([
+                                        ...(existingCompletion?.habitIdsCompleted || []),
+                                        ...completedIds
+                                    ])]
+                                }
+                            }
+                        }
+                    }
+                });
+            }
+            
+            // ===== Cycle Tracking =====
+            case ActionTypes.UPDATE_CYCLE_SETTINGS: {
+                return {
+                    ...state,
+                    cycle: {
+                        ...state.cycle,
+                        ...payload
+                    }
+                };
+            }
+            
+            case ActionTypes.LOG_PERIOD: {
+                const newPeriod = {
+                    id: `period-${Date.now()}`,
+                    startDate: payload.startDate,
+                    endDate: payload.endDate || null,
+                    flow: payload.flow || null,
+                    notes: payload.notes || ''
+                };
+                return {
+                    ...state,
+                    cycle: {
+                        ...state.cycle,
+                        periods: [...(state.cycle?.periods || []), newPeriod]
+                    }
+                };
+            }
+            
+            case ActionTypes.UPDATE_PERIOD: {
+                return {
+                    ...state,
+                    cycle: {
+                        ...state.cycle,
+                        periods: (state.cycle?.periods || []).map(p =>
+                            p.id === payload.id ? { ...p, ...payload } : p
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.DELETE_PERIOD: {
+                return {
+                    ...state,
+                    cycle: {
+                        ...state.cycle,
+                        periods: (state.cycle?.periods || []).filter(p => p.id !== payload.id)
+                    }
+                };
+            }
+            
+            case ActionTypes.LOG_CYCLE_SYMPTOMS: {
+                const dateKey = payload.date || DateUtils.toKey();
+                return {
+                    ...state,
+                    cycle: {
+                        ...state.cycle,
+                        symptoms: {
+                            ...(state.cycle?.symptoms || {}),
+                            [dateKey]: { ...(state.cycle?.symptoms?.[dateKey] || {}), ...payload.symptoms }
+                        }
+                    }
                 };
             }
             
@@ -2978,7 +3505,22 @@
                         // Cognitive Command Center extensions
                         researchLog: state.researchLog,
                         skillXP: state.skillXP,
-                        researchMilestones: state.researchMilestones
+                        researchMilestones: state.researchMilestones,
+                        
+                        // Flashcards & Topics
+                        flashcards: state.flashcards,
+                        topics: state.topics,
+                        
+                        // Enhanced Focus Mode
+                        focusMode: state.focusMode,
+                        
+                        // Grading schemes & templates
+                        grading: state.grading,
+                        
+                        // Wellness Insights & Routines & Cycle
+                        wellnessInsights: state.wellnessInsights,
+                        routines: state.routines,
+                        cycle: state.cycle
                     };
                     localStorage.setItem(CONFIG.STORAGE_KEY, JSON.stringify(toSave));
                 } catch (e) {
@@ -3017,6 +3559,34 @@
                     if (!parsed.grades) parsed.grades = { semesters: [] };
                     if (!parsed.notifications) parsed.notifications = [];
                     if (!parsed._version) parsed._version = '3.0.0';
+                    // Migrate grading schemes & templates
+                    if (!parsed.grading) {
+                        parsed.grading = createInitialState().grading;
+                    }
+                    // Migrate flashcards
+                    if (!parsed.flashcards) {
+                        parsed.flashcards = createInitialState().flashcards;
+                    }
+                    // Migrate topics
+                    if (!parsed.topics) {
+                        parsed.topics = [];
+                    }
+                    // Migrate focus mode enhancements
+                    if (parsed.focusMode && !parsed.focusMode.mode) {
+                        parsed.focusMode = { ...createInitialState().focusMode, ...parsed.focusMode };
+                    }
+                    // Migrate wellness insights
+                    if (!parsed.wellnessInsights) {
+                        parsed.wellnessInsights = createInitialState().wellnessInsights;
+                    }
+                    // Migrate routines
+                    if (!parsed.routines) {
+                        parsed.routines = createInitialState().routines;
+                    }
+                    // Migrate cycle tracking
+                    if (!parsed.cycle) {
+                        parsed.cycle = createInitialState().cycle;
+                    }
                     // Migrate subjects from string array to object array (only once)
                     if (parsed.subjects && parsed.subjects.length > 0 && typeof parsed.subjects[0] === 'string') {
                         parsed.subjects = parsed.subjects.map((name, idx) => ({
@@ -3848,6 +4418,487 @@
     });
 
     // --- ORGANISMS (Complex UI sections) ---
+
+    // ============================================================================
+    // WELLNESS ALERT ENGINE (derived, not persisted)
+    // ============================================================================
+    
+    function generateWellnessAlerts(state, now = new Date()) {
+        if (!state.wellnessInsights?.rulesEnabled) return [];
+        
+        const alerts = [];
+        const thresholds = state.wellnessInsights?.thresholds || {};
+        const dismissed = state.wellnessInsights?.dismissed || {};
+        const todayKey = DateUtils.toKey(now);
+        
+        // Helper: get ISO week string for stable IDs
+        const getWeekId = (d) => {
+            const jan1 = new Date(d.getFullYear(), 0, 1);
+            const weekNum = Math.ceil(((d - jan1) / 86400000 + jan1.getDay() + 1) / 7);
+            return `${d.getFullYear()}-W${String(weekNum).padStart(2, '0')}`;
+        };
+        const weekId = getWeekId(now);
+        
+        // Rule 1: Weekly sleep debt
+        const sleepGoal = state.settings?.sleepGoal || state.sleepGoal || 8;
+        const last7Days = [];
+        for (let i = 0; i < 7; i++) {
+            last7Days.push(DateUtils.toKey(DateUtils.addDays(now, -i)));
+        }
+        const totalSleep = (state.sleepLog || [])
+            .filter(s => last7Days.includes(s.date))
+            .reduce((sum, s) => sum + (s.hours || 0), 0);
+        const sleepDebt = Math.max(0, sleepGoal * 7 - totalSleep);
+        
+        const sleepAlertId = `sleep-debt-${weekId}`;
+        if (sleepDebt >= (thresholds.weeklySleepDebtHours || 5) && !dismissed[sleepAlertId]) {
+            alerts.push({
+                id: sleepAlertId,
+                ruleId: 'sleepDebt',
+                severity: sleepDebt >= 10 ? 'critical' : 'warning',
+                title: '😴 Sleep Debt Alert',
+                message: `You're short by ${sleepDebt.toFixed(1)}h of sleep over the last 7 days. Try a 20–30 min earlier bedtime tonight.`,
+                createdAt: now.toISOString(),
+                actionLink: { view: 'journal' },
+                data: { sleepDebt, totalSleep, goal: sleepGoal * 7 }
+            });
+        }
+        
+        // Rule 2: Burnout rising + study load increasing
+        const studySessions = state.studySessions || [];
+        const thisWeekMins = studySessions
+            .filter(s => last7Days.includes(s.date))
+            .reduce((sum, s) => sum + (s.duration || 0), 0);
+        
+        const prev7Days = [];
+        for (let i = 7; i < 14; i++) {
+            prev7Days.push(DateUtils.toKey(DateUtils.addDays(now, -i)));
+        }
+        const prevWeekMins = studySessions
+            .filter(s => prev7Days.includes(s.date))
+            .reduce((sum, s) => sum + (s.duration || 0), 0);
+        
+        const studyIncreasePct = prevWeekMins > 0 ? ((thisWeekMins - prevWeekMins) / prevWeekMins) * 100 : 0;
+        
+        // Lightweight burnout proxy
+        const sleepDebtNorm = Math.min(1, sleepDebt / 14);
+        const studyNorm = Math.min(1, thisWeekMins / (40 * 60)); // 40h max
+        
+        // Mood trend (map emoji to numeric)
+        const moodMap = { 'veryHappy': 5, 'happy': 4, 'neutral': 3, 'sad': 2, 'verySad': 1 };
+        let moodScoreThisWeek = 0, moodCountThis = 0;
+        let moodScorePrevWeek = 0, moodCountPrev = 0;
+        last7Days.forEach(d => {
+            const m = state.moodLog?.[d];
+            if (m?.mood && moodMap[m.mood]) { moodScoreThisWeek += moodMap[m.mood]; moodCountThis++; }
+        });
+        prev7Days.forEach(d => {
+            const m = state.moodLog?.[d];
+            if (m?.mood && moodMap[m.mood]) { moodScorePrevWeek += moodMap[m.mood]; moodCountPrev++; }
+        });
+        const avgMoodThis = moodCountThis > 0 ? moodScoreThisWeek / moodCountThis : 3;
+        const avgMoodPrev = moodCountPrev > 0 ? moodScorePrevWeek / moodCountPrev : 3;
+        const moodNorm = Math.max(0, 1 - (avgMoodThis - 1) / 4); // lower mood = higher burnout
+        
+        const burnoutThis = (sleepDebtNorm * 0.35 + studyNorm * 0.35 + moodNorm * 0.3);
+        
+        const prevSleepDebt = Math.max(0, sleepGoal * 7 - (state.sleepLog || [])
+            .filter(s => prev7Days.includes(s.date))
+            .reduce((sum, s) => sum + (s.hours || 0), 0));
+        const prevSleepNorm = Math.min(1, prevSleepDebt / 14);
+        const prevStudyNorm = Math.min(1, prevWeekMins / (40 * 60));
+        const prevMoodNorm = Math.max(0, 1 - (avgMoodPrev - 1) / 4);
+        const burnoutPrev = (prevSleepNorm * 0.35 + prevStudyNorm * 0.35 + prevMoodNorm * 0.3);
+        
+        const burnoutDelta = burnoutThis - burnoutPrev;
+        
+        const burnoutAlertId = `burnout-rising-${weekId}`;
+        if (burnoutDelta >= (thresholds.burnoutRisingDelta || 0.12) && 
+            studyIncreasePct >= (thresholds.studyLoadIncreasePct || 25) &&
+            !dismissed[burnoutAlertId]) {
+            alerts.push({
+                id: burnoutAlertId,
+                ruleId: 'burnoutRising',
+                severity: burnoutDelta > 0.25 && sleepDebt > 7 ? 'critical' : 'warning',
+                title: '🔥 Burnout Risk Rising',
+                message: `Burnout risk trending up (+${(burnoutDelta * 100).toFixed(0)}%) while study load rose ${studyIncreasePct.toFixed(0)}% week-over-week. Consider a lighter plan today + a recovery block.`,
+                createdAt: now.toISOString(),
+                actionLink: { view: 'study' },
+                data: { burnoutDelta, studyIncreasePct, burnoutScore: burnoutThis }
+            });
+        }
+        
+        // Rule 3: Consecutive low mood
+        const lowMoodThreshold = thresholds.consecutiveLowMoodDays || 3;
+        let consecutiveLowMood = 0;
+        for (let i = 0; i < 14; i++) {
+            const dk = DateUtils.toKey(DateUtils.addDays(now, -i));
+            const m = state.moodLog?.[dk];
+            if (m?.mood && (m.mood === 'sad' || m.mood === 'verySad')) {
+                consecutiveLowMood++;
+            } else if (m?.mood) {
+                break;
+            }
+        }
+        
+        const moodAlertId = `low-mood-streak-${todayKey}`;
+        if (consecutiveLowMood >= lowMoodThreshold && !dismissed[moodAlertId]) {
+            alerts.push({
+                id: moodAlertId,
+                ruleId: 'consecutiveLowMood',
+                severity: consecutiveLowMood >= 5 ? 'warning' : 'info',
+                title: '💙 Mood Check-in',
+                message: `You've been feeling low for ${consecutiveLowMood} days in a row. Consider reaching out to a friend, taking a walk, or doing something you enjoy.`,
+                createdAt: now.toISOString(),
+                actionLink: { view: 'journal' },
+                data: { consecutiveLowMood }
+            });
+        }
+        
+        return alerts;
+    }
+
+    // ============================================================================
+    // WELLNESS ALERTS CARD
+    // ============================================================================
+    
+    const WellnessAlertsCard = memo(() => {
+        const { state, dispatch } = useApp();
+        
+        const alerts = useMemo(() => generateWellnessAlerts(state), [
+            state.sleepLog, state.studySessions, state.moodLog, 
+            state.wellnessInsights, state.settings, state.sleepGoal
+        ]);
+        
+        if (alerts.length === 0) return null;
+        
+        const severityColors = {
+            critical: 'from-rose-500/20 to-red-500/20 border-rose-500/30',
+            warning: 'from-amber-500/20 to-orange-500/20 border-amber-500/30',
+            info: 'from-blue-500/20 to-cyan-500/20 border-blue-500/30'
+        };
+        const severityIcons = { critical: '🚨', warning: '⚠️', info: 'ℹ️' };
+        
+        return (
+            <section className="mb-6" aria-labelledby="wellness-alerts-heading">
+                <div className="flex items-center gap-2 mb-3">
+                    <span className="text-lg">🩺</span>
+                    <h3 id="wellness-alerts-heading" className="font-bold text-white text-sm">Wellness Insights</h3>
+                    <span className="text-xs bg-amber-500/20 text-amber-400 px-2 py-0.5 rounded-full">{alerts.length}</span>
+                </div>
+                <div className="space-y-2">
+                    {alerts.map(alert => (
+                        <div key={alert.id} className={`bg-gradient-to-r ${severityColors[alert.severity]} rounded-xl p-3 border`}>
+                            <div className="flex items-start gap-2">
+                                <span className="text-sm mt-0.5">{severityIcons[alert.severity]}</span>
+                                <div className="flex-1 min-w-0">
+                                    <div className="text-sm font-semibold text-white">{alert.title}</div>
+                                    <div className="text-xs text-slate-300 mt-1">{alert.message}</div>
+                                    <div className="flex items-center gap-2 mt-2">
+                                        {alert.actionLink && (
+                                            <button
+                                                onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: alert.actionLink.view })}
+                                                className="text-xs px-2 py-1 bg-white/10 text-white rounded hover:bg-white/20 transition-colors"
+                                                aria-label={`Go to ${alert.actionLink.view}`}
+                                            >
+                                                View →
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={() => dispatch({ type: ActionTypes.DISMISS_INSIGHT_ALERT, payload: { alertId: alert.id } })}
+                                            className="text-xs px-2 py-1 text-slate-400 hover:text-slate-300 transition-colors"
+                                            aria-label="Dismiss alert"
+                                        >
+                                            Dismiss
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            </section>
+        );
+    });
+    
+    // ============================================================================
+    // ROUTINE BUILDER
+    // ============================================================================
+    
+    const RoutinesSection = memo(() => {
+        const { state, dispatch } = useApp();
+        const [showEditor, setShowEditor] = useState(false);
+        const [editingRoutine, setEditingRoutine] = useState(null);
+        const [editorName, setEditorName] = useState('');
+        const [editorIcon, setEditorIcon] = useState('☀️');
+        const [editorHabitIds, setEditorHabitIds] = useState([]);
+        
+        const todayKey = DateUtils.toKey();
+        const routines = state.routines?.items || [];
+        const activeHabits = useMemo(() => 
+            state.habitOrder.map(id => ({ ...state.habits[id], _hid: id })).filter(h => h && !h.archived),
+            [state.habits, state.habitOrder]
+        );
+        
+        const openEditor = useCallback((routine) => {
+            if (routine) {
+                setEditingRoutine(routine);
+                setEditorName(routine.name);
+                setEditorIcon(routine.icon);
+                setEditorHabitIds([...routine.habitIds]);
+            } else {
+                setEditingRoutine(null);
+                setEditorName('');
+                setEditorIcon('☀️');
+                setEditorHabitIds([]);
+            }
+            setShowEditor(true);
+        }, []);
+        
+        const saveRoutine = useCallback(() => {
+            if (!editorName.trim()) return;
+            if (editingRoutine) {
+                dispatch({ type: ActionTypes.UPDATE_ROUTINE, payload: { id: editingRoutine.id, name: editorName, icon: editorIcon, habitIds: editorHabitIds } });
+            } else {
+                dispatch({ type: ActionTypes.ADD_ROUTINE, payload: { name: editorName, icon: editorIcon, habitIds: editorHabitIds } });
+            }
+            setShowEditor(false);
+        }, [editorName, editorIcon, editorHabitIds, editingRoutine, dispatch]);
+        
+        const toggleHabitInRoutine = useCallback((hid) => {
+            setEditorHabitIds(prev => prev.includes(hid) ? prev.filter(id => id !== hid) : [...prev, hid]);
+        }, []);
+        
+        if (routines.length === 0 && !showEditor) {
+            return (
+                <section className="mb-6">
+                    <div className="flex items-center justify-between mb-3">
+                        <div className="flex items-center gap-2">
+                            <span className="text-lg">🔄</span>
+                            <h3 className="font-bold text-white text-sm">Routines</h3>
+                        </div>
+                        <button onClick={() => openEditor(null)} className="text-xs text-indigo-400 hover:text-indigo-300" aria-label="Add routine">+ Add</button>
+                    </div>
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700 text-center">
+                        <div className="text-2xl mb-2">🌅</div>
+                        <div className="text-sm text-slate-400">Create a morning or evening routine to complete habits with one tap</div>
+                    </div>
+                </section>
+            );
+        }
+        
+        return (
+            <section className="mb-6">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg">🔄</span>
+                        <h3 className="font-bold text-white text-sm">Routines</h3>
+                    </div>
+                    <button onClick={() => openEditor(null)} className="text-xs text-indigo-400 hover:text-indigo-300" aria-label="Add routine">+ Add</button>
+                </div>
+                
+                <div className="space-y-2">
+                    {routines.map(routine => {
+                        const completed = routine.habitIds.filter(hid => state.habits[hid]?.data?.[todayKey]).length;
+                        const total = routine.habitIds.length;
+                        const allDone = total > 0 && completed === total;
+                        const routineCompletion = state.routines?.completions?.[todayKey]?.[routine.id];
+                        
+                        return (
+                            <div key={routine.id} className={`rounded-xl p-3 border transition-all ${allDone ? 'bg-emerald-500/10 border-emerald-500/30' : 'bg-slate-800/50 border-slate-700'}`}>
+                                <div className="flex items-center justify-between">
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-lg">{routine.icon}</span>
+                                        <div>
+                                            <div className="text-sm font-medium text-white">{routine.name}</div>
+                                            <div className="text-xs text-slate-400">{completed}/{total} habits done</div>
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        {!allDone && total > 0 && (
+                                            <button
+                                                onClick={() => {
+                                                    dispatch({ type: ActionTypes.COMPLETE_ROUTINE_TODAY, payload: { routineId: routine.id } });
+                                                    showToast(`${routine.name} completed! 🎉`, 'success');
+                                                }}
+                                                className="text-xs px-3 py-1.5 bg-indigo-500 text-white rounded-lg hover:bg-indigo-600 transition-colors"
+                                                aria-label={`Complete ${routine.name}`}
+                                            >
+                                                Complete All
+                                            </button>
+                                        )}
+                                        {allDone && <span className="text-xs text-emerald-400 font-medium">✓ Done</span>}
+                                        <button onClick={() => openEditor(routine)} className="text-slate-400 hover:text-white p-1" aria-label={`Edit ${routine.name}`}>
+                                            <svg xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" strokeWidth="1.5" stroke="currentColor" className="w-4 h-4"><path strokeLinecap="round" strokeLinejoin="round" d="m16.862 4.487 1.687-1.688a1.875 1.875 0 1 1 2.652 2.652L6.832 19.82a4.5 4.5 0 0 1-1.897 1.13l-2.685.8.8-2.685a4.5 4.5 0 0 1 1.13-1.897L16.863 4.487Z" /></svg>
+                                        </button>
+                                    </div>
+                                </div>
+                                {total > 0 && (
+                                    <div className="mt-2 w-full bg-slate-700 rounded-full h-1.5">
+                                        <div className={`h-1.5 rounded-full transition-all ${allDone ? 'bg-emerald-500' : 'bg-indigo-500'}`} style={{ width: `${(completed / total) * 100}%` }} />
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    })}
+                </div>
+                
+                {/* Routine Editor Bottom Sheet */}
+                {showEditor && (
+                    <div className="fixed inset-0 bg-black/60 z-50 flex items-end justify-center" onClick={() => setShowEditor(false)}>
+                        <div className="bg-slate-800 rounded-t-2xl w-full max-w-lg max-h-[80vh] overflow-y-auto p-4" onClick={e => e.stopPropagation()}>
+                            <div className="w-12 h-1 bg-slate-600 rounded-full mx-auto mb-4" />
+                            <h3 className="font-bold text-white text-lg mb-4">{editingRoutine ? 'Edit Routine' : 'New Routine'}</h3>
+                            
+                            <div className="space-y-3">
+                                <div>
+                                    <label className="text-xs text-slate-400 mb-1 block">Name</label>
+                                    <input value={editorName} onChange={e => setEditorName(e.target.value)} placeholder="e.g., Morning Routine"
+                                        className="w-full bg-slate-700 text-white rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500" />
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400 mb-1 block">Icon</label>
+                                    <div className="flex gap-2 flex-wrap">
+                                        {['☀️', '🌙', '💪', '🧘', '📚', '🏃', '☕', '🌿'].map(icon => (
+                                            <button key={icon} onClick={() => setEditorIcon(icon)}
+                                                className={`text-xl p-2 rounded-lg ${editorIcon === icon ? 'bg-indigo-500/30 ring-2 ring-indigo-500' : 'bg-slate-700'}`}>{icon}</button>
+                                        ))}
+                                    </div>
+                                </div>
+                                <div>
+                                    <label className="text-xs text-slate-400 mb-1 block">Habits ({editorHabitIds.length} selected)</label>
+                                    <div className="space-y-1 max-h-48 overflow-y-auto">
+                                        {activeHabits.map(h => {
+                                            const hid = h._hid;
+                                            const selected = editorHabitIds.includes(hid);
+                                            return (
+                                            <button key={hid} 
+                                                onClick={() => toggleHabitInRoutine(hid)}
+                                                className={`w-full flex items-center gap-2 p-2 rounded-lg text-left text-sm transition-colors ${
+                                                    selected ? 'bg-indigo-500/20 text-white' : 'bg-slate-700/50 text-slate-300'
+                                                }`}>
+                                                <span>{h.icon || '📌'}</span>
+                                                <span>{h.name}</span>
+                                                {selected && <span className="ml-auto text-indigo-400">✓</span>}
+                                            </button>
+                                            );
+                                        })}
+                                    </div>
+                                </div>
+                            </div>
+                            
+                            <div className="flex gap-2 mt-4">
+                                {editingRoutine && (
+                                    <button onClick={() => { dispatch({ type: ActionTypes.DELETE_ROUTINE, payload: { id: editingRoutine.id } }); setShowEditor(false); }}
+                                        className="px-4 py-2 text-rose-400 text-sm hover:bg-rose-500/10 rounded-lg" aria-label="Delete routine">Delete</button>
+                                )}
+                                <div className="flex-1" />
+                                <button onClick={() => setShowEditor(false)} className="px-4 py-2 text-slate-400 text-sm">Cancel</button>
+                                <button onClick={saveRoutine} className="px-4 py-2 bg-indigo-500 text-white text-sm rounded-lg hover:bg-indigo-600">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+            </section>
+        );
+    });
+    
+    // ============================================================================
+    // CYCLE TRACKING (Optional)
+    // ============================================================================
+    
+    const CycleTrackingCard = memo(() => {
+        const { state, dispatch } = useApp();
+        const [showLog, setShowLog] = useState(false);
+        const [startDate, setStartDate] = useState(DateUtils.toKey());
+        const [flow, setFlow] = useState('medium');
+        
+        if (!state.cycle?.enabled) return null;
+        
+        const periods = state.cycle?.periods || [];
+        const lastPeriod = periods.length > 0 ? periods[periods.length - 1] : null;
+        const cycleLen = state.cycle?.settings?.averageCycleLength || 28;
+        const periodLen = state.cycle?.settings?.averagePeriodLength || 5;
+        
+        // Estimate current cycle day and next period
+        let cycleDay = null;
+        let nextPeriodDate = null;
+        let currentPhase = '';
+        
+        if (lastPeriod) {
+            const lastStart = DateUtils.parseKey(lastPeriod.startDate);
+            const today = new Date();
+            const daysSinceStart = Math.round((today - lastStart) / 86400000);
+            cycleDay = (daysSinceStart % cycleLen) + 1;
+            
+            const nextDate = DateUtils.addDays(lastStart, cycleLen * Math.max(1, Math.ceil((daysSinceStart + 1) / cycleLen)));
+            nextPeriodDate = nextDate;
+            
+            // Dynamic phase estimation based on user settings
+            const lutealLen = state.cycle?.settings?.lutealLength || 14;
+            const ovulationDay = cycleLen - lutealLen;
+            if (cycleDay <= periodLen) currentPhase = 'Menstrual';
+            else if (cycleDay < ovulationDay - 1) currentPhase = 'Follicular';
+            else if (cycleDay <= ovulationDay + 1) currentPhase = 'Ovulation';
+            else currentPhase = 'Luteal';
+        }
+        
+        return (
+            <div className="bg-gradient-to-r from-pink-500/10 to-purple-500/10 rounded-xl p-4 border border-pink-500/20 mb-4">
+                <div className="flex items-center justify-between mb-3">
+                    <div className="flex items-center gap-2">
+                        <span className="text-lg">🌸</span>
+                        <h3 className="font-bold text-white text-sm">Cycle Tracker</h3>
+                    </div>
+                    <button onClick={() => setShowLog(!showLog)} className="text-xs text-pink-400 hover:text-pink-300">
+                        {showLog ? 'Close' : '+ Log'}
+                    </button>
+                </div>
+                
+                {cycleDay !== null ? (
+                    <div className="grid grid-cols-3 gap-2 mb-2">
+                        <div className="text-center">
+                            <div className="text-lg font-bold text-pink-400">Day {cycleDay}</div>
+                            <div className="text-[10px] text-slate-400">Cycle Day</div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-sm font-semibold text-purple-400">{currentPhase}</div>
+                            <div className="text-[10px] text-slate-400">Phase</div>
+                        </div>
+                        <div className="text-center">
+                            <div className="text-sm font-semibold text-slate-300">{nextPeriodDate ? (() => { const d = nextPeriodDate instanceof Date ? nextPeriodDate : DateUtils.parseKey(nextPeriodDate); const diff = Math.round((d - new Date()) / 86400000); return diff <= 0 ? 'Any day' : diff <= 7 ? `in ${diff}d` : d.toLocaleDateString('en', { month: 'short', day: 'numeric' }); })() : '—'}</div>
+                            <div className="text-[10px] text-slate-400">Next (est.)</div>
+                        </div>
+                    </div>
+                ) : (
+                    <div className="text-xs text-slate-400 mb-2">Log your first period to start tracking.</div>
+                )}
+                
+                <div className="text-[10px] text-slate-500 italic">All data is stored locally only. Dates are estimates.</div>
+                
+                {showLog && (
+                    <div className="mt-3 space-y-2 border-t border-slate-700 pt-3">
+                        <div>
+                            <label htmlFor="period-start-date" className="text-xs text-slate-400">Period start date</label>
+                            <input id="period-start-date" type="date" value={startDate} onChange={e => setStartDate(e.target.value)}
+                                className="w-full bg-slate-700 text-white rounded-lg px-3 py-1.5 text-sm mt-1" />
+                        </div>
+                        <div>
+                            <label className="text-xs text-slate-400">Flow</label>
+                            <div className="flex gap-2 mt-1">
+                                {['light', 'medium', 'heavy'].map(f => (
+                                    <button key={f} onClick={() => setFlow(f)}
+                                        className={`text-xs px-3 py-1 rounded-lg capitalize ${flow === f ? 'bg-pink-500/30 text-pink-300' : 'bg-slate-700 text-slate-400'}`}>{f}</button>
+                                ))}
+                            </div>
+                        </div>
+                        <button onClick={() => { dispatch({ type: ActionTypes.LOG_PERIOD, payload: { startDate, flow } }); setShowLog(false); showToast('Period logged'); }}
+                            className="w-full py-2 bg-pink-500 text-white text-sm rounded-lg hover:bg-pink-600 transition-colors">Log Period</button>
+                    </div>
+                )}
+            </div>
+        );
+    });
 
     /**
      * Insights Panel with real AI-generated insights
@@ -5346,6 +6397,46 @@
                         </div>
                     </>
                 )}
+                
+                {/* ===== Flashcard Analytics ===== */}
+                {(() => {
+                    const reviews = state.flashcards?.reviews || [];
+                    const cards = state.flashcards?.cards || [];
+                    if (reviews.length === 0 && cards.length === 0) return null;
+                    
+                    const last30 = reviews.filter(r => new Date(r.reviewedAt) > new Date(Date.now() - 30 * 86400000));
+                    const todayKey = DateUtils.toKey();
+                    const todayRevs = reviews.filter(r => r.reviewedAt?.startsWith(todayKey)).length;
+                    const retention = last30.length > 0 ? Math.round(last30.filter(r => r.grade >= 2).length / last30.length * 100) : 0;
+                    
+                    const dailyCounts = [];
+                    for (let i = 6; i >= 0; i--) {
+                        const d = new Date(Date.now() - i * 86400000);
+                        const key = DateUtils.toKey(d);
+                        dailyCounts.push({ day: ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'][d.getDay()], count: reviews.filter(r => r.reviewedAt?.startsWith(key)).length });
+                    }
+                    const maxCt = Math.max(1, ...dailyCounts.map(d => d.count));
+                    
+                    return (
+                        <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700 space-y-3">
+                            <h3 className="text-sm font-semibold text-white">🃏 Flashcard Stats</h3>
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="text-center"><div className="text-lg font-bold text-indigo-400">{todayRevs}</div><div className="text-[10px] text-slate-400">Today</div></div>
+                                <div className="text-center"><div className="text-lg font-bold text-emerald-400">{retention}%</div><div className="text-[10px] text-slate-400">Retention (30d)</div></div>
+                                <div className="text-center"><div className="text-lg font-bold text-amber-400">{cards.length}</div><div className="text-[10px] text-slate-400">Total Cards</div></div>
+                            </div>
+                            <div className="text-xs text-slate-400 mb-1">Reviews / day (7d)</div>
+                            <div className="flex items-end gap-1 h-16">
+                                {dailyCounts.map((d, i) => (
+                                    <div key={i} className="flex-1 flex flex-col items-center gap-0.5">
+                                        <div className="w-full bg-indigo-500/30 rounded-t" style={{height: `${Math.max(4, (d.count / maxCt) * 100)}%`}} />
+                                        <span className="text-[9px] text-slate-500">{d.day}</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    );
+                })()}
             </div>
         );
     });
@@ -5518,6 +6609,26 @@
                                 {c}
                             </button>
                         ))}
+                    </div>
+                </div>
+                
+                {/* Cycle Tracking */}
+                <div className="space-y-3">
+                    <h3 className="text-sm font-semibold text-slate-300">Tracking</h3>
+                    <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700">
+                        <div className="flex items-center justify-between py-2">
+                            <div>
+                                <div className="text-sm text-white">Cycle Tracking</div>
+                                <div className="text-xs text-slate-400">Local only, private</div>
+                            </div>
+                            <button 
+                                onClick={() => dispatch({ type: ActionTypes.UPDATE_CYCLE_SETTINGS, payload: { enabled: !state.cycle?.enabled } })}
+                                className={`w-12 h-6 rounded-full transition-colors ${state.cycle?.enabled ? 'bg-pink-500' : 'bg-slate-600'}`}
+                                aria-label="Toggle cycle tracking"
+                            >
+                                <div className={`w-5 h-5 bg-white rounded-full transition-transform ${state.cycle?.enabled ? 'translate-x-6' : 'translate-x-0.5'}`} />
+                            </button>
+                        </div>
                     </div>
                 </div>
                 
@@ -5822,6 +6933,11 @@
                     </div>
                 )}
                 
+                {/* Wellness Features */}
+                <WellnessAlertsCard />
+                <RoutinesSection />
+                <CycleTrackingCard />
+                
                 {/* Insights Panel */}
                 <InsightsPanel />
                 
@@ -5937,6 +7053,8 @@
                 <div className="flex gap-2 bg-slate-800/50 p-1 rounded-xl overflow-x-auto">
                     {[
                         { id: 'timer', label: 'Timer', icon: '⏱️' },
+                        { id: 'flashcards', label: 'Cards', icon: '🃏' },
+                        { id: 'topics', label: 'Topics', icon: '📑' },
                         { id: 'exams', label: 'Exams', icon: '🎓' },
                         { id: 'assignments', label: 'Tasks', icon: '📝' },
                         { id: 'timetable', label: 'Timetable', icon: '📅' }
@@ -6253,6 +7371,275 @@
                         )}
                     </div>
                 )}
+                
+                {/* ===== FLASHCARDS TAB ===== */}
+                {activeTab === 'flashcards' && (() => {
+                    const decks = state.flashcards?.decks || [];
+                    const allCards = state.flashcards?.cards || [];
+                    const allReviews = state.flashcards?.reviews || [];
+                    const activeDeckId = state.flashcards?.ui?.activeDeckId;
+                    const activeDeck = decks.find(d => d.id === activeDeckId);
+                    const now = new Date();
+                    const todayKey = DateUtils.toKey();
+                    
+                    const getDeckCounts = (deckId) => {
+                        const dc = allCards.filter(c => c.deckId === deckId && !c.suspended);
+                        return {
+                            due: dc.filter(c => c.state === 'review' && c.dueAt && new Date(c.dueAt) <= now).length,
+                            learning: dc.filter(c => c.state === 'learning' && c.dueAt && new Date(c.dueAt) <= now).length,
+                            newCards: dc.filter(c => c.state === 'new').length,
+                            total: dc.length
+                        };
+                    };
+                    
+                    if (!activeDeckId) {
+                        return (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <h3 className="text-lg font-semibold text-white">Flashcard Decks</h3>
+                                    <button onClick={() => {
+                                        const name = prompt('Deck name:');
+                                        if (!name?.trim()) return;
+                                        dispatch({ type: ActionTypes.ADD_DECK, payload: {
+                                            id: crypto.randomUUID(), subjectId: state.subjects[0]?.id || null, name: name.trim(), createdAt: new Date().toISOString(),
+                                            settings: { newPerDay: 20, reviewPerDay: 100, learningStepsMins: [10, 1440], easeFactorBase: 2.5 }
+                                        }});
+                                        showToast('Deck created', 'success');
+                                    }} className="px-4 py-2 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl text-sm font-medium">+ New Deck</button>
+                                </div>
+                                {decks.length === 0 ? (
+                                    <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                                        <div className="text-4xl mb-4">🃏</div>
+                                        <h3 className="text-lg font-semibold text-white mb-2">No Decks Yet</h3>
+                                        <p className="text-slate-400">Create flashcard decks for spaced repetition study</p>
+                                    </div>
+                                ) : decks.map(deck => {
+                                    const cn = getDeckCounts(deck.id);
+                                    const subj = state.subjects.find(s => s.id === deck.subjectId);
+                                    return (
+                                        <div key={deck.id} className="bg-slate-800/50 rounded-xl p-4 border border-slate-700 cursor-pointer hover:bg-slate-800/80"
+                                            onClick={() => dispatch({ type: ActionTypes.SET_ACTIVE_DECK, payload: deck.id })}>
+                                            <div className="flex items-center justify-between mb-2">
+                                                <div className="flex items-center gap-2">
+                                                    {subj && <span className="w-3 h-3 rounded-full" style={{backgroundColor: CONFIG.COLORS[subj.color]?.bg || '#6366f1'}} />}
+                                                    <span className="font-medium text-white">{deck.name}</span>
+                                                </div>
+                                                <button onClick={e => { e.stopPropagation(); if(confirm('Delete deck?')) dispatch({ type: ActionTypes.DELETE_DECK, payload: deck.id }); }}
+                                                    className="text-rose-400 hover:text-rose-300 text-xs p-1" aria-label="Delete deck">🗑️</button>
+                                            </div>
+                                            <div className="flex gap-3 text-xs">
+                                                <span className="text-blue-400">{cn.due} due</span>
+                                                <span className="text-amber-400">{cn.learning} learning</span>
+                                                <span className="text-emerald-400">{cn.newCards} new</span>
+                                                <span className="text-slate-400">{cn.total} total</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        );
+                    }
+                    
+                    const DeckDetail = () => {
+                        const [reviewMode, setReviewMode] = React.useState(false);
+                        const [showAns, setShowAns] = React.useState(false);
+                        const [cardStart, setCardStart] = React.useState(Date.now());
+                        const [revCt, setRevCt] = React.useState(0);
+                        const [okCt, setOkCt] = React.useState(0);
+                        const [addingCard, setAddingCard] = React.useState(false);
+                        const [cFront, setCFront] = React.useState('');
+                        const [cBack, setCBack] = React.useState('');
+                        const [cTags, setCTags] = React.useState('');
+                        const [cTopic, setCTopic] = React.useState('');
+                        const [browse, setBrowse] = React.useState(false);
+                        const [sq, setSq] = React.useState('');
+                        
+                        const dc = allCards.filter(c => c.deckId === activeDeckId && !c.suspended);
+                        const cn = getDeckCounts(activeDeckId);
+                        const stg = activeDeck?.settings || { newPerDay: 20, reviewPerDay: 100 };
+                        
+                        const queue = useMemo(() => {
+                            const lr = dc.filter(c => c.state === 'learning' && c.dueAt && new Date(c.dueAt) <= now);
+                            const rv = dc.filter(c => c.state === 'review' && c.dueAt && new Date(c.dueAt) <= now).slice(0, stg.reviewPerDay);
+                            const nw = dc.filter(c => c.state === 'new').slice(0, stg.newPerDay);
+                            return [...lr, ...rv, ...nw];
+                        }, [dc, stg]);
+                        
+                        const cur = reviewMode && queue.length > 0 ? queue[0] : null;
+                        const sTopics = (state.topics || []).filter(t => t.subjectId === activeDeck?.subjectId);
+                        
+                        if (reviewMode && !cur) return (
+                            <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center">
+                                <div className="text-4xl mb-3">🎉</div>
+                                <h3 className="text-lg font-bold text-white mb-2">Session Complete!</h3>
+                                <p className="text-slate-400 mb-4">Reviewed: {revCt} • Accuracy: {revCt > 0 ? Math.round(okCt/revCt*100) : 0}%</p>
+                                <button onClick={() => {setReviewMode(false);setRevCt(0);setOkCt(0);}} className="px-6 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium">Done</button>
+                            </div>
+                        );
+                        
+                        if (reviewMode && cur) return (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <button onClick={() => setReviewMode(false)} className="text-slate-400 hover:text-white text-sm">← Back</button>
+                                    <span className="text-xs text-slate-400">{queue.length} remaining</span>
+                                </div>
+                                <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 min-h-[200px] flex flex-col items-center justify-center text-center">
+                                    <div className="text-white text-lg mb-4 whitespace-pre-wrap">{cur.front}</div>
+                                    {!showAns ? (
+                                        <button onClick={() => setShowAns(true)} className="px-8 py-3 bg-indigo-500 hover:bg-indigo-600 text-white rounded-xl font-medium">Show Answer</button>
+                                    ) : (
+                                        <div className="space-y-4 w-full">
+                                            <div className="border-t border-slate-700 pt-4"><div className="text-indigo-300 text-lg whitespace-pre-wrap">{cur.back}</div></div>
+                                            <div className="grid grid-cols-4 gap-2">
+                                                {[{g:0,l:'Again',cl:'bg-rose-500/20 text-rose-400 border-rose-500/30'},{g:1,l:'Hard',cl:'bg-amber-500/20 text-amber-400 border-amber-500/30'},{g:2,l:'Good',cl:'bg-emerald-500/20 text-emerald-400 border-emerald-500/30'},{g:3,l:'Easy',cl:'bg-blue-500/20 text-blue-400 border-blue-500/30'}].map(b => (
+                                                    <button key={b.g} onClick={() => {
+                                                        dispatch({type:ActionTypes.REVIEW_CARD,payload:{cardId:cur.id,grade:b.g,timeMs:Date.now()-cardStart}});
+                                                        setShowAns(false);setCardStart(Date.now());setRevCt(r=>r+1);if(b.g>=2)setOkCt(c=>c+1);
+                                                    }} className={`py-2 rounded-lg text-sm font-medium border ${b.cl}`}>{b.l}</button>
+                                                ))}
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        );
+                        
+                        if (browse) {
+                            const fl = allCards.filter(c => c.deckId === activeDeckId && (c.front.toLowerCase().includes(sq.toLowerCase()) || c.back.toLowerCase().includes(sq.toLowerCase())));
+                            return (
+                                <div className="space-y-3">
+                                    <div className="flex items-center justify-between">
+                                        <button onClick={() => setBrowse(false)} className="text-slate-400 hover:text-white text-sm">← Back</button>
+                                        <span className="text-xs text-slate-400">{fl.length} cards</span>
+                                    </div>
+                                    <input type="text" value={sq} onChange={e => setSq(e.target.value)} placeholder="Search cards..." className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                                    {fl.map(c => (
+                                        <div key={c.id} className="bg-slate-800/50 rounded-lg p-3 border border-slate-700/50">
+                                            <div className="flex items-center justify-between">
+                                                <div className="flex-1 min-w-0">
+                                                    <div className="text-sm text-white truncate">{c.front}</div>
+                                                    <div className="text-xs text-slate-400 truncate">{c.back}</div>
+                                                    <div className="text-[10px] text-slate-500 mt-1">{c.state} • EF:{(c.easeFactor||2.5).toFixed(1)} • IV:{c.intervalDays||0}d{c.suspended?' • SUSPENDED':''}</div>
+                                                </div>
+                                                <div className="flex gap-1">
+                                                    <button onClick={() => dispatch({type:ActionTypes.TOGGLE_SUSPEND_CARD,payload:c.id})} className="text-xs px-1.5 py-0.5 bg-amber-500/20 text-amber-400 rounded">{c.suspended?'Unsuspend':'Suspend'}</button>
+                                                    <button onClick={() => dispatch({type:ActionTypes.DELETE_CARD,payload:c.id})} className="text-rose-400 text-xs p-0.5" aria-label="Delete card">✕</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            );
+                        }
+                        
+                        return (
+                            <div className="space-y-4">
+                                <div className="flex items-center justify-between">
+                                    <button onClick={() => dispatch({type:ActionTypes.SET_ACTIVE_DECK,payload:null})} className="text-slate-400 hover:text-white text-sm">← All Decks</button>
+                                    <h3 className="font-medium text-white">{activeDeck?.name}</h3>
+                                </div>
+                                <div className="grid grid-cols-3 gap-2">
+                                    <div className="bg-blue-500/10 rounded-lg p-3 border border-blue-500/20 text-center"><div className="text-xl font-bold text-blue-400">{cn.due}</div><div className="text-[10px] text-slate-400">Due</div></div>
+                                    <div className="bg-amber-500/10 rounded-lg p-3 border border-amber-500/20 text-center"><div className="text-xl font-bold text-amber-400">{cn.learning}</div><div className="text-[10px] text-slate-400">Learning</div></div>
+                                    <div className="bg-emerald-500/10 rounded-lg p-3 border border-emerald-500/20 text-center"><div className="text-xl font-bold text-emerald-400">{cn.newCards}</div><div className="text-[10px] text-slate-400">New</div></div>
+                                </div>
+                                <div className="flex gap-2">
+                                    <button onClick={() => {setReviewMode(true);setShowAns(false);setCardStart(Date.now());setRevCt(0);setOkCt(0);}} disabled={queue.length===0}
+                                        className={`flex-1 py-3 rounded-xl font-medium text-sm ${queue.length>0?'bg-indigo-500 hover:bg-indigo-600 text-white':'bg-slate-700 text-slate-500'}`}>🔄 Review ({queue.length})</button>
+                                    <button onClick={() => setAddingCard(true)} className="flex-1 py-3 bg-emerald-500/20 text-emerald-400 rounded-xl font-medium text-sm border border-emerald-500/30">+ Add Card</button>
+                                </div>
+                                <button onClick={() => setBrowse(true)} className="w-full py-2 text-indigo-400 text-sm hover:bg-indigo-500/10 rounded-lg border border-dashed border-slate-700">📖 Browse ({allCards.filter(c => c.deckId === activeDeckId).length} cards)</button>
+                                {addingCard && (
+                                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60" onClick={() => setAddingCard(false)}>
+                                        <div className="w-full max-w-lg mx-4 bg-slate-900 rounded-t-2xl sm:rounded-2xl p-5 border border-slate-700" onClick={e => e.stopPropagation()}>
+                                            <h3 className="text-lg font-bold text-white mb-3">Add Flashcard</h3>
+                                            <div className="space-y-3">
+                                                <textarea value={cFront} onChange={e => setCFront(e.target.value)} placeholder="Front (question)" className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm h-20 resize-none" />
+                                                <textarea value={cBack} onChange={e => setCBack(e.target.value)} placeholder="Back (answer)" className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm h-20 resize-none" />
+                                                <input type="text" value={cTags} onChange={e => setCTags(e.target.value)} placeholder="Tags (comma separated)" className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                                                {sTopics.length > 0 && <select value={cTopic} onChange={e => setCTopic(e.target.value)} className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm"><option value="">Link to topic (optional)</option>{sTopics.map(t => <option key={t.id} value={t.id}>{t.title}</option>)}</select>}
+                                            </div>
+                                            <div className="flex gap-2 mt-4">
+                                                <button onClick={() => setAddingCard(false)} className="flex-1 py-2 bg-slate-800 rounded-lg text-white text-sm">Cancel</button>
+                                                <button onClick={() => {
+                                                    if (!cFront.trim()||!cBack.trim()) {showToast('Front and back required','error');return;}
+                                                    dispatch({type:ActionTypes.ADD_CARD,payload:{id:crypto.randomUUID(),deckId:activeDeckId,subjectId:activeDeck?.subjectId||null,front:cFront.trim(),back:cBack.trim(),tags:cTags.split(',').map(t=>t.trim()).filter(Boolean),topicId:cTopic||null,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString(),suspended:false,state:'new',dueAt:null,intervalDays:0,easeFactor:2.5,reps:0,lapses:0,lastReviewedAt:null}});
+                                                    setCFront('');setCBack('');setCTags('');setCTopic('');setAddingCard(false);showToast('Card added','success');
+                                                }} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Add Card</button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    };
+                    return <DeckDetail />;
+                })()}
+                
+                {/* ===== TOPICS TAB ===== */}
+                {activeTab === 'topics' && (() => {
+                    const TopicsPanel = () => {
+                        const [selSubj, setSelSubj] = React.useState(state.subjects[0]?.id || '');
+                        const [adding, setAdding] = React.useState(false);
+                        const [tTitle, setTTitle] = React.useState('');
+                        const [tHours, setTHours] = React.useState('');
+                        const sTopics = useMemo(() => (state.topics||[]).filter(t => t.subjectId === selSubj).sort((a,b) => (a.order||0)-(b.order||0)), [state.topics, selSubj]);
+                        const getTime = (tid) => state.studySessions.filter(s => s.topicId === tid).reduce((sum, s) => sum + s.duration, 0);
+                        return (
+                            <div className="space-y-4">
+                                <h3 className="text-lg font-semibold text-white">Topics / Chapters</h3>
+                                {state.subjects.length === 0 ? (
+                                    <div className="bg-slate-800/50 rounded-xl p-6 border border-slate-700 text-center"><div className="text-4xl mb-3">📑</div><p className="text-slate-400">Add subjects first to create topics</p></div>
+                                ) : (
+                                    <div className="space-y-3">
+                                        <select value={selSubj} onChange={e => setSelSubj(e.target.value)} className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm">
+                                            {state.subjects.map(s => <option key={s.id} value={s.id}>{typeof s==='string'?s:s.name}</option>)}
+                                        </select>
+                                        {sTopics.length === 0 && !adding && <div className="bg-slate-800/50 rounded-xl p-4 border border-slate-700 text-center"><p className="text-slate-400 text-sm">No topics yet</p></div>}
+                                        {sTopics.map((topic, idx) => {
+                                            const ts = getTime(topic.id);
+                                            return (
+                                                <div key={topic.id} className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 space-y-2">
+                                                    <div className="flex items-center justify-between">
+                                                        <span className="text-sm font-medium text-white">{topic.title}</span>
+                                                        <div className="flex items-center gap-1">
+                                                            <button onClick={() => dispatch({type:ActionTypes.REORDER_TOPIC,payload:{topicId:topic.id,direction:'up'}})} disabled={idx===0} className="text-slate-400 hover:text-white text-xs p-0.5 disabled:opacity-30" aria-label="Move up">▲</button>
+                                                            <button onClick={() => dispatch({type:ActionTypes.REORDER_TOPIC,payload:{topicId:topic.id,direction:'down'}})} disabled={idx===sTopics.length-1} className="text-slate-400 hover:text-white text-xs p-0.5 disabled:opacity-30" aria-label="Move down">▼</button>
+                                                            <button onClick={() => dispatch({type:ActionTypes.DELETE_TOPIC,payload:topic.id})} className="text-rose-400 hover:text-rose-300 text-xs p-0.5" aria-label="Delete topic">✕</button>
+                                                        </div>
+                                                    </div>
+                                                    <div className="flex items-center gap-2">
+                                                        <input type="range" min="0" max="100" value={topic.progress||0} onChange={e => dispatch({type:ActionTypes.UPDATE_TOPIC,payload:{id:topic.id,progress:Number(e.target.value),updatedAt:new Date().toISOString()}})} className="flex-1 h-1.5 accent-indigo-500" aria-label="Progress" />
+                                                        <span className="text-xs text-indigo-400 font-medium w-10 text-right">{topic.progress||0}%</span>
+                                                    </div>
+                                                    <div className="flex items-center justify-between text-[10px] text-slate-400">
+                                                        <span>⏱ {Math.floor(ts/60)}h {ts%60}m studied</span>
+                                                        {topic.plannedHours > 0 && <span>📋 {topic.plannedHours}h planned</span>}
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                        {adding ? (
+                                            <div className="bg-slate-800/50 rounded-xl p-3 border border-slate-700 space-y-2">
+                                                <input type="text" value={tTitle} onChange={e => setTTitle(e.target.value)} placeholder="Topic / Chapter name" className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" autoFocus />
+                                                <input type="number" value={tHours} onChange={e => setTHours(e.target.value)} placeholder="Planned hours (optional)" className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" min="0" />
+                                                <div className="flex gap-2">
+                                                    <button onClick={() => {
+                                                        if (!tTitle.trim()) return;
+                                                        dispatch({type:ActionTypes.ADD_TOPIC,payload:{id:crypto.randomUUID(),subjectId:selSubj,title:tTitle.trim(),notes:'',order:sTopics.length,plannedHours:Number(tHours)||0,progress:0,createdAt:new Date().toISOString(),updatedAt:new Date().toISOString()}});
+                                                        setTTitle('');setTHours('');setAdding(false);showToast('Topic added','success');
+                                                    }} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Add</button>
+                                                    <button onClick={() => {setAdding(false);setTTitle('');setTHours('');}} className="flex-1 py-2 bg-slate-700 rounded-lg text-slate-300 text-sm">Cancel</button>
+                                                </div>
+                                            </div>
+                                        ) : <button onClick={() => setAdding(true)} className="w-full py-2 text-indigo-400 text-sm hover:bg-indigo-500/10 rounded-lg border border-dashed border-slate-700">+ Add Topic</button>}
+                                    </div>
+                                )}
+                            </div>
+                        );
+                    };
+                    return <TopicsPanel />;
+                })()}
                 
                 {/* Quick Stats */}
                 <div className="grid grid-cols-3 gap-3">
@@ -7593,6 +8980,18 @@
         const [entryMaxScore, setEntryMaxScore] = useState('100');
         
         const semesters = state.grades?.semesters || [];
+        const grading = state.grading || createInitialState().grading;
+        const schemes = grading.schemes || [];
+        const templates = grading.templates || [];
+        const activeScheme = useMemo(() => schemes.find(s => s.id === grading.activeSchemeId) || schemes[0] || createInitialState().grading.schemes[0], [schemes, grading.activeSchemeId]);
+        
+        // --- UI state for new panels ---
+        const [activeTab, setActiveTab] = useState('grades'); // grades | schemes | templates
+        const [schemeModal, setSchemeModal] = useState(null); // null | scheme object for editing
+        const [templateModal, setTemplateModal] = useState(null); // null | template object for editing
+        const [selectedTemplateId, setSelectedTemplateId] = useState(templates[0]?.id || '');
+        const [whatIfCourse, setWhatIfCourse] = useState(null); // { semId, courseId }
+        const [whatIfOverrides, setWhatIfOverrides] = useState({}); // { componentType: { score, maxScore } }
         
         const DEFAULT_COMPONENTS = [
             { type: 'Class Test', label: 'Class Tests', icon: '📝', multiple: true, maxEntries: 2 },
@@ -7602,15 +9001,36 @@
             { type: 'Attendance', label: 'Attendance', icon: '📅', multiple: false, maxEntries: 1 },
         ];
         
-        const getLetterGrade = (pct) => {
-            if (pct >= 90) return { grade: 'Excellent', color: 'text-emerald-400' };
-            if (pct >= 80) return { grade: 'A', color: 'text-emerald-400' };
-            if (pct >= 70) return { grade: 'B', color: 'text-blue-400' };
-            if (pct >= 60) return { grade: 'C', color: 'text-amber-400' };
-            if (pct >= 50) return { grade: 'D', color: 'text-orange-400' };
-            if (pct >= 40) return { grade: 'Pass', color: 'text-orange-500' };
-            return { grade: 'Fail', color: 'text-rose-400' };
-        };
+        // --- Pure helper: percent → GPA using active scheme boundaries ---
+        const percentToGpa = useCallback((pct, scheme) => {
+            const boundaries = (scheme || activeScheme).boundaries || [];
+            for (const b of boundaries) {
+                if (pct >= b.minPercent) return { gpa: b.gpa, letter: b.letter, label: b.label };
+            }
+            const last = boundaries[boundaries.length - 1];
+            return last ? { gpa: last.gpa, letter: last.letter, label: last.label } : { gpa: 0, letter: 'F', label: 'Fail' };
+        }, [activeScheme]);
+        
+        // --- Pure helper: apply rounding ---
+        const roundGpa = useCallback((value, scheme) => {
+            const r = (scheme || activeScheme).rounding || { mode: 'fixed', decimals: 2 };
+            const d = Math.pow(10, r.decimals || 2);
+            if (r.mode === 'floor') return Math.floor(value * d) / d;
+            if (r.mode === 'ceil') return Math.ceil(value * d) / d;
+            return Math.round(value * d) / d; // 'fixed' or 'nearest'
+        }, [activeScheme]);
+        
+        // --- Scheme-based getLetterGrade (replaces hardcoded) ---
+        const getLetterGrade = useCallback((pct) => {
+            const { letter, label } = percentToGpa(pct);
+            const grade = letter || label || 'N/A';
+            // Color based on percentage ranges
+            let color = 'text-rose-400';
+            if (pct >= 80) color = 'text-emerald-400';
+            else if (pct >= 60) color = 'text-blue-400';
+            else if (pct >= 40) color = 'text-amber-400';
+            return { grade, color };
+        }, [percentToGpa]);
         
         // Migrate old assessments to component-based structure for backward compat
         const getComponents = (course) => {
@@ -7664,13 +9084,7 @@
         const calcCourseGPA = (course) => {
             const pct = calcCoursePercentage(course);
             if (pct === null) return null;
-            if (pct >= 90) return 10;
-            if (pct >= 80) return 9;
-            if (pct >= 70) return 8;
-            if (pct >= 60) return 7;
-            if (pct >= 50) return 6;
-            if (pct >= 40) return 5;
-            return 0;
+            return percentToGpa(pct).gpa;
         };
         
         const calcSemesterGPA = (semester) => {
@@ -7683,7 +9097,7 @@
                     totalPoints += gpa * (c.creditHours || 3);
                 }
             });
-            return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 'N/A';
+            return totalCredits > 0 ? roundGpa(totalPoints / totalCredits).toFixed(2) : 'N/A';
         };
         
         const calcCGPA = () => {
@@ -7697,7 +9111,7 @@
                     }
                 });
             });
-            return totalCredits > 0 ? (totalPoints / totalCredits).toFixed(2) : 'N/A';
+            return totalCredits > 0 ? roundGpa(totalPoints / totalCredits).toFixed(2) : 'N/A';
         };
         
         const handleAddSemester = () => {
@@ -7720,7 +9134,21 @@
         const handleAddCourse = (semId) => {
             if (!courseName.trim()) return;
             const newId = crypto.randomUUID();
-            dispatch({ type: ActionTypes.ADD_COURSE, payload: { semesterId: semId, course: { id: newId, name: courseName.trim(), creditHours: courseCredits, assessments: [] } } });
+            // Generate assessments from selected template
+            let assessments = [];
+            const tmpl = templates.find(t => t.id === selectedTemplateId);
+            if (tmpl && tmpl.components) {
+                assessments = tmpl.components.map(comp => ({
+                    id: crypto.randomUUID(),
+                    name: comp.name,
+                    type: comp.type,
+                    componentWeight: comp.weight,
+                    weight: comp.weight,
+                    score: null,
+                    maxScore: null,
+                }));
+            }
+            dispatch({ type: ActionTypes.ADD_COURSE, payload: { semesterId: semId, course: { id: newId, name: courseName.trim(), creditHours: courseCredits, assessments } } });
             setCourseName(''); setCourseCredits(3); setShowAddCourse(null);
             setExpandedCourse(newId);
             showToast('Course added', 'success');
@@ -7892,7 +9320,7 @@
                         <p className="text-slate-400 text-sm">Track courses, components & weighted grades</p>
                     </div>
                     <div className="text-right">
-                        <div className="text-xs text-slate-400">CGPA (out of 10)</div>
+                        <div className="text-xs text-slate-400">CGPA (out of {activeScheme.scaleMax})</div>
                         <div className="text-2xl font-bold text-indigo-400">{calcCGPA()}</div>
                     </div>
                 </div>
@@ -7936,7 +9364,7 @@
                                         </div>
                                     </div>
                                     <div className="flex items-center gap-3">
-                                        <span className="text-sm text-indigo-400 font-medium">GPA: {calcSemesterGPA(sem)}/10</span>
+                                        <span className="text-sm text-indigo-400 font-medium">GPA: {calcSemesterGPA(sem)}/{activeScheme.scaleMax}</span>
                                         <button onClick={e => { e.stopPropagation(); handleDeleteSemester(sem.id); }}
                                             className="text-rose-400 hover:text-rose-300 text-sm p-1" aria-label="Delete semester">🗑️</button>
                                     </div>
@@ -8104,6 +9532,16 @@
                                                     <input type="number" value={courseCredits} onChange={e => setCourseCredits(Math.max(1, Math.min(10, Number(e.target.value))))}
                                                         min="1" max="10" className="w-16 px-2 py-1 bg-slate-800 rounded text-white text-xs border border-slate-600" />
                                                 </div>
+                                                {templates.length > 0 && (
+                                                    <div className="flex items-center gap-2">
+                                                        <label className="text-xs text-slate-400">Template:</label>
+                                                        <select value={selectedTemplateId} onChange={e => setSelectedTemplateId(e.target.value)}
+                                                            className="flex-1 px-2 py-1 bg-slate-800 rounded text-white text-xs border border-slate-600">
+                                                            <option value="">None (empty course)</option>
+                                                            {templates.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}
+                                                        </select>
+                                                    </div>
+                                                )}
                                                 <div className="flex gap-2">
                                                     <button onClick={() => handleAddCourse(sem.id)} className="flex-1 py-1.5 bg-indigo-500 rounded text-white text-sm font-medium">Add Course</button>
                                                     <button onClick={() => { setShowAddCourse(null); setCourseName(''); }} className="flex-1 py-1.5 bg-slate-700 rounded text-slate-300 text-sm">Cancel</button>
@@ -8176,6 +9614,175 @@
                         </div>
                     </div>
                 )}
+                
+                {/* ===== Grading Scheme Manager ===== */}
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-white">⚙️ Grading Schemes</h3>
+                        <button onClick={() => setSchemeModal({ id: '', name: '', scaleMax: 10, rounding: { mode: 'fixed', decimals: 2 }, boundaries: [{ minPercent: 90, gpa: 10, letter: 'O', label: 'Excellent' }, { minPercent: 80, gpa: 9, letter: 'A+', label: 'Very Good' }, { minPercent: 70, gpa: 8, letter: 'A', label: 'Good' }, { minPercent: 60, gpa: 7, letter: 'B+', label: 'Above Avg' }, { minPercent: 50, gpa: 6, letter: 'B', label: 'Avg' }, { minPercent: 40, gpa: 5, letter: 'C', label: 'Pass' }, { minPercent: 0, gpa: 0, letter: 'F', label: 'Fail' }] })}
+                            className="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30">+ Add Scheme</button>
+                    </div>
+                    <div className="space-y-1.5">
+                        {schemes.map(s => (
+                            <div key={s.id} className={`flex items-center justify-between p-2 rounded-lg border ${s.id === grading.activeSchemeId ? 'border-indigo-500/50 bg-indigo-500/10' : 'border-slate-700 bg-slate-900/40'}`}>
+                                <div>
+                                    <span className="text-xs text-white font-medium">{s.name}</span>
+                                    <span className="text-[10px] text-slate-400 ml-1">({s.boundaries?.length || 0} levels, max {s.scaleMax})</span>
+                                </div>
+                                <div className="flex items-center gap-1">
+                                    {s.id !== grading.activeSchemeId && (
+                                        <button onClick={() => dispatch({ type: ActionTypes.SET_ACTIVE_GRADING_SCHEME, payload: s.id })}
+                                            className="text-[10px] px-1.5 py-0.5 bg-emerald-500/20 text-emerald-400 rounded hover:bg-emerald-500/30">Set Active</button>
+                                    )}
+                                    {s.id === grading.activeSchemeId && <span className="text-[10px] px-1.5 py-0.5 bg-indigo-500/30 text-indigo-300 rounded">Active</span>}
+                                    <button onClick={() => setSchemeModal({...s})} className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Edit scheme">✏️</button>
+                                    <button onClick={() => { dispatch({ type: ActionTypes.ADD_GRADING_SCHEME, payload: { ...s, id: crypto.randomUUID(), name: s.name + ' (copy)', boundaries: s.boundaries.map(b => ({...b})) } }); showToast('Scheme duplicated', 'success'); }}
+                                        className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Duplicate scheme">📋</button>
+                                    {s.id !== grading.activeSchemeId && (
+                                        <button onClick={() => { dispatch({ type: ActionTypes.DELETE_GRADING_SCHEME, payload: s.id }); showToast('Scheme deleted', 'success'); }}
+                                            className="text-rose-400 hover:text-rose-300 text-xs p-0.5" aria-label="Delete scheme">✕</button>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+                
+                {/* ===== Assessment Template Manager ===== */}
+                <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4 space-y-3">
+                    <div className="flex items-center justify-between">
+                        <h3 className="text-sm font-bold text-white">📄 Assessment Templates</h3>
+                        <button onClick={() => setTemplateModal({ id: '', name: '', components: [{ key: crypto.randomUUID(), name: 'Component 1', type: 'Custom', weight: 100 }] })}
+                            className="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30">+ Add Template</button>
+                    </div>
+                    <div className="space-y-1.5">
+                        {templates.map(t => {
+                            const totalW = (t.components || []).reduce((s, c) => s + (c.weight || 0), 0);
+                            return (
+                                <div key={t.id} className="flex items-center justify-between p-2 rounded-lg border border-slate-700 bg-slate-900/40">
+                                    <div>
+                                        <span className="text-xs text-white font-medium">{t.name}</span>
+                                        <span className="text-[10px] text-slate-400 ml-1">({(t.components || []).length} comps, {totalW}%{totalW !== 100 ? ' ⚠️' : ''})</span>
+                                    </div>
+                                    <div className="flex items-center gap-1">
+                                        <button onClick={() => setTemplateModal({...t, components: (t.components || []).map(c => ({...c}))})} className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Edit template">✏️</button>
+                                        <button onClick={() => { dispatch({ type: ActionTypes.ADD_GRADE_TEMPLATE, payload: { ...t, id: crypto.randomUUID(), name: t.name + ' (copy)', components: (t.components || []).map(c => ({...c, key: crypto.randomUUID()})) } }); showToast('Template duplicated', 'success'); }}
+                                            className="text-slate-400 hover:text-white text-xs p-0.5" aria-label="Duplicate template">📋</button>
+                                        <button onClick={() => { dispatch({ type: ActionTypes.DELETE_GRADE_TEMPLATE, payload: t.id }); showToast('Template deleted', 'success'); }}
+                                            className="text-rose-400 hover:text-rose-300 text-xs p-0.5" aria-label="Delete template">✕</button>
+                                    </div>
+                                </div>
+                            );
+                        })}
+                    </div>
+                </div>
+                
+                {/* ===== Scheme Editor Modal ===== */}
+                {schemeModal && (
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setSchemeModal(null)}>
+                        <div className="w-full max-w-lg mx-4 bg-slate-900 rounded-t-2xl sm:rounded-2xl p-5 border border-slate-700 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold text-white mb-3">{schemeModal.id ? 'Edit Scheme' : 'New Scheme'}</h3>
+                            <div className="space-y-3">
+                                <div className="flex gap-2">
+                                    <input type="text" value={schemeModal.name} onChange={e => setSchemeModal({...schemeModal, name: e.target.value})} placeholder="Scheme name"
+                                        className="flex-1 px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                                    <input type="number" value={schemeModal.scaleMax} onChange={e => setSchemeModal({...schemeModal, scaleMax: Math.max(1, Number(e.target.value))})}
+                                        className="w-20 px-2 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm text-center" min="1" />
+                                    <span className="text-xs text-slate-400 self-center">max</span>
+                                </div>
+                                <div className="flex items-center gap-2">
+                                    <label className="text-xs text-slate-400">Rounding:</label>
+                                    <select value={schemeModal.rounding?.mode || 'fixed'} onChange={e => setSchemeModal({...schemeModal, rounding: {...(schemeModal.rounding || {}), mode: e.target.value}})}
+                                        className="px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs">
+                                        <option value="fixed">Fixed</option><option value="floor">Floor</option><option value="ceil">Ceil</option><option value="nearest">Nearest</option>
+                                    </select>
+                                    <input type="number" value={schemeModal.rounding?.decimals ?? 2} onChange={e => setSchemeModal({...schemeModal, rounding: {...(schemeModal.rounding || {}), decimals: Math.max(0, Math.min(4, Number(e.target.value)))}})}
+                                        className="w-14 px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" max="4" />
+                                    <span className="text-xs text-slate-400">decimals</span>
+                                </div>
+                                <div className="text-xs font-medium text-slate-300">Boundaries (min % → GPA)</div>
+                                <div className="space-y-1">
+                                    {(schemeModal.boundaries || []).map((b, idx) => (
+                                        <div key={idx} className="flex items-center gap-1">
+                                            <input type="number" value={b.minPercent} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], minPercent: Number(e.target.value)}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="w-14 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" max="100" />
+                                            <span className="text-xs text-slate-400">→</span>
+                                            <input type="number" value={b.gpa} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], gpa: Number(e.target.value)}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="w-12 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" step="0.5" />
+                                            <input type="text" value={b.letter || ''} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], letter: e.target.value}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="w-12 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" placeholder="Ltr" />
+                                            <input type="text" value={b.label || ''} onChange={e => { const bs = [...schemeModal.boundaries]; bs[idx] = {...bs[idx], label: e.target.value}; setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="flex-1 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs" placeholder="Label" />
+                                            <button onClick={() => { const bs = schemeModal.boundaries.filter((_, i) => i !== idx); setSchemeModal({...schemeModal, boundaries: bs}); }}
+                                                className="text-rose-400 text-xs p-0.5">✕</button>
+                                        </div>
+                                    ))}
+                                    <button onClick={() => setSchemeModal({...schemeModal, boundaries: [...(schemeModal.boundaries || []), { minPercent: 0, gpa: 0, letter: '', label: '' }]})}
+                                        className="w-full py-1 text-xs text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600">+ Add Boundary</button>
+                                </div>
+                            </div>
+                            <div className="flex gap-2 mt-4">
+                                <button onClick={() => setSchemeModal(null)} className="flex-1 py-2 bg-slate-800 rounded-lg text-white text-sm">Cancel</button>
+                                <button onClick={() => {
+                                    if (!schemeModal.name.trim()) { showToast('Name required', 'error'); return; }
+                                    const sorted = [...(schemeModal.boundaries || [])].sort((a, b) => b.minPercent - a.minPercent);
+                                    const scheme = { ...schemeModal, boundaries: sorted, id: schemeModal.id || crypto.randomUUID() };
+                                    if (schemes.find(s => s.id === scheme.id)) dispatch({ type: ActionTypes.UPDATE_GRADING_SCHEME, payload: scheme });
+                                    else dispatch({ type: ActionTypes.ADD_GRADING_SCHEME, payload: scheme });
+                                    setSchemeModal(null); showToast('Scheme saved', 'success');
+                                }} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
+                
+                {/* ===== Template Editor Modal ===== */}
+                {templateModal && (
+                    <div className="fixed inset-0 z-50 flex items-end sm:items-center justify-center bg-black/60 backdrop-blur-sm" onClick={() => setTemplateModal(null)}>
+                        <div className="w-full max-w-lg mx-4 bg-slate-900 rounded-t-2xl sm:rounded-2xl p-5 border border-slate-700 max-h-[85vh] overflow-y-auto" onClick={e => e.stopPropagation()}>
+                            <h3 className="text-lg font-bold text-white mb-3">{templateModal.id ? 'Edit Template' : 'New Template'}</h3>
+                            <div className="space-y-3">
+                                <input type="text" value={templateModal.name} onChange={e => setTemplateModal({...templateModal, name: e.target.value})} placeholder="Template name"
+                                    className="w-full px-3 py-2 bg-slate-800 rounded-lg border border-slate-600 text-white text-sm" />
+                                <div className="text-xs font-medium text-slate-300">Components</div>
+                                {(() => {
+                                    const totalW = (templateModal.components || []).reduce((s, c) => s + (c.weight || 0), 0);
+                                    return (
+                                        <div className="space-y-1">
+                                            {(templateModal.components || []).map((comp, idx) => (
+                                                <div key={comp.key || idx} className="flex items-center gap-1">
+                                                    <input type="text" value={comp.name} onChange={e => { const cs = [...templateModal.components]; cs[idx] = {...cs[idx], name: e.target.value}; setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="flex-1 px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs" placeholder="Name" />
+                                                    <input type="text" value={comp.type} onChange={e => { const cs = [...templateModal.components]; cs[idx] = {...cs[idx], type: e.target.value}; setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="w-24 px-2 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs" placeholder="Type" />
+                                                    <input type="number" value={comp.weight} onChange={e => { const cs = [...templateModal.components]; cs[idx] = {...cs[idx], weight: Number(e.target.value)}; setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="w-14 px-1 py-1 bg-slate-800 rounded border border-slate-600 text-white text-xs text-center" min="0" max="100" />
+                                                    <button onClick={() => { const cs = templateModal.components.filter((_, i) => i !== idx); setTemplateModal({...templateModal, components: cs}); }}
+                                                        className="text-rose-400 text-xs p-0.5">✕</button>
+                                                </div>
+                                            ))}
+                                            <div className="flex items-center justify-between text-xs">
+                                                <button onClick={() => setTemplateModal({...templateModal, components: [...(templateModal.components || []), { key: crypto.randomUUID(), name: '', type: 'Custom', weight: 0 }]})}
+                                                    className="py-1 px-2 text-indigo-400 hover:bg-indigo-500/10 rounded border border-dashed border-slate-600">+ Add Component</button>
+                                                <span className={totalW === 100 ? 'text-emerald-400' : 'text-amber-400'}>Total: {totalW}% {totalW !== 100 ? '⚠️' : '✅'}</span>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+                            </div>
+                            <div className="flex gap-2 mt-4">
+                                <button onClick={() => setTemplateModal(null)} className="flex-1 py-2 bg-slate-800 rounded-lg text-white text-sm">Cancel</button>
+                                <button onClick={() => {
+                                    if (!templateModal.name.trim()) { showToast('Name required', 'error'); return; }
+                                    const tmpl = { ...templateModal, id: templateModal.id || crypto.randomUUID() };
+                                    if (templates.find(t => t.id === tmpl.id)) dispatch({ type: ActionTypes.UPDATE_GRADE_TEMPLATE, payload: tmpl });
+                                    else dispatch({ type: ActionTypes.ADD_GRADE_TEMPLATE, payload: tmpl });
+                                    setTemplateModal(null); showToast('Template saved', 'success');
+                                }} className="flex-1 py-2 bg-indigo-500 rounded-lg text-white text-sm font-medium">Save</button>
+                            </div>
+                        </div>
+                    </div>
+                )}
             </div>
         );
     });
@@ -8185,94 +9792,210 @@
     // ============================================================================
     
     const CalendarView = memo(() => {
-        const { state } = useApp();
-        const [currentMonth, setCurrentMonth] = useState(new Date().getMonth());
-        const [currentYear, setCurrentYear] = useState(new Date().getFullYear());
-        const [selectedDay, setSelectedDay] = useState(null);
-        
-        const getDaysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
-        const getFirstDayOfMonth = (year, month) => new Date(year, month, 1).getDay();
-        
+        const { state, dispatch } = useApp();
+        const [calMode, setCalMode] = useState('month'); // month | week | agenda
+        const [currentDate, setCurrentDate] = useState(new Date());
+        const [selectedDateKey, setSelectedDateKey] = useState(null);
+        const [agendaRange, setAgendaRange] = useState(30);
+
+        const weekStartsOn = state.settings?.weekStartsOn ?? 0;
+        const timeFormat = state.settings?.timeFormat || '12h';
+        const todayKey = DateUtils.toKey();
+
         const monthNames = ['January','February','March','April','May','June','July','August','September','October','November','December'];
-        const dayNames = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
-        
-        const today = DateUtils.toKey();
-        
-        // Gather all events for this month
-        const getEventsForDay = (dateKey) => {
+        const dayNamesBase = ['Sun','Mon','Tue','Wed','Thu','Fri','Sat'];
+        const dayNamesFull = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
+        const dayNames = useMemo(() => {
+            if (weekStartsOn === 0) return dayNamesBase;
+            return [...dayNamesBase.slice(weekStartsOn), ...dayNamesBase.slice(0, weekStartsOn)];
+        }, [weekStartsOn]);
+
+        // --- Helper: format time ---
+        const formatTime = useCallback((timeStr) => {
+            if (!timeStr) return '';
+            const [h, m] = timeStr.split(':').map(Number);
+            if (timeFormat === '24h') return timeStr;
+            const ampm = h >= 12 ? 'PM' : 'AM';
+            const h12 = h % 12 || 12;
+            return `${h12}:${String(m).padStart(2, '0')} ${ampm}`;
+        }, [timeFormat]);
+
+        // --- Helper: get subject color ---
+        const getSubjectColor = useCallback((subjectName) => {
+            const subj = (state.subjects || []).find(s => (typeof s === 'string' ? s : s.name) === subjectName);
+            if (subj && typeof subj === 'object' && subj.color) {
+                return CONFIG.COLORS[subj.color]?.bg || '#6366f1';
+            }
+            return '#6366f1';
+        }, [state.subjects]);
+
+        // --- Goal category colors ---
+        const goalCategoryColors = { Academic: '#8b5cf6', Health: '#10b981', Financial: '#f59e0b', Personal: '#06b6d4', Career: '#f43f5e' };
+
+        // --- Unified event builder (derived, never persisted) ---
+        const buildCalendarEvents = useCallback((startDate, endDate) => {
             const events = [];
-            // Assignments
-            (state.assignments || []).filter(a => a.type !== 'exam').forEach(a => {
-                if (a.dueDate && a.dueDate.startsWith(dateKey)) {
-                    events.push({ type: 'assignment', title: a.title, color: 'bg-blue-500' });
-                }
+            const startKey = DateUtils.toKey(startDate);
+            const endKey = DateUtils.toKey(endDate);
+
+            // Assignments & Exams
+            (state.assignments || []).forEach(a => {
+                if (!a.dueDate) return;
+                const dueKey = a.dueDate.substring(0, 10);
+                if (dueKey < startKey || dueKey > endKey) return;
+                const isExam = a.type === 'exam';
+                const hasTime = a.dueDate.length > 10;
+                events.push({
+                    id: a.id,
+                    kind: isExam ? 'exam' : 'assignment',
+                    title: `${isExam ? 'Exam' : 'Assignment'}: ${a.subject ? a.subject + ' — ' : ''}${a.title}`,
+                    start: a.dueDate,
+                    end: a.dueDate,
+                    allDay: !hasTime,
+                    color: isExam ? '#f43f5e' : getSubjectColor(a.subject),
+                    icon: isExam ? '🎓' : '📝',
+                    sourceId: a.id,
+                    meta: { status: a.status, priority: a.priority }
+                });
             });
-            // Exams
-            (state.assignments || []).filter(a => a.type === 'exam').forEach(a => {
-                if (a.dueDate && a.dueDate.startsWith(dateKey)) {
-                    events.push({ type: 'exam', title: a.title, color: 'bg-rose-500' });
-                }
-            });
-            // Timetable (check day of week)
-            const dayOfWeek = new Date(dateKey).getDay();
-            const dayMap = ['Sunday','Monday','Tuesday','Wednesday','Thursday','Friday','Saturday'];
-            (state.timetable || []).forEach(t => {
-                if ((t.days || [t.day]).includes(dayMap[dayOfWeek])) {
-                    events.push({ type: 'class', title: t.subject, color: 'bg-emerald-500' });
-                }
-            });
+
+            // Timetable (recurring weekly — expand for visible range)
+            const dayMap = dayNamesFull;
+            let d = new Date(startDate);
+            d.setHours(0, 0, 0, 0);
+            const endD = new Date(endDate);
+            endD.setHours(23, 59, 59, 999);
+            while (d <= endD) {
+                const dow = d.getDay();
+                const dateKey = DateUtils.toKey(d);
+                (state.timetable || []).forEach(t => {
+                    if ((t.days || [t.day]).includes(dayMap[dow])) {
+                        events.push({
+                            id: `tt-${t.id}-${dateKey}`,
+                            kind: 'timetable',
+                            title: t.subject + (t.room ? ` (${t.room})` : ''),
+                            start: `${dateKey}T${t.startTime || '08:00'}`,
+                            end: `${dateKey}T${t.endTime || '09:00'}`,
+                            allDay: false,
+                            color: t.color ? (CONFIG.COLORS[t.color]?.bg || getSubjectColor(t.subject)) : getSubjectColor(t.subject),
+                            icon: '📚',
+                            sourceId: t.id,
+                            location: t.room,
+                            meta: { startTime: t.startTime, endTime: t.endTime }
+                        });
+                    }
+                });
+                d = DateUtils.addDays(d, 1);
+            }
+
             // Goals
             (state.goals || []).forEach(g => {
-                if (g.targetDate && g.targetDate.startsWith(dateKey)) {
-                    events.push({ type: 'goal', title: g.title, color: 'bg-purple-500' });
-                }
+                const deadline = g.deadline || g.targetDate;
+                if (!deadline) return;
+                const gKey = deadline.substring(0, 10);
+                if (gKey < startKey || gKey > endKey) return;
+                events.push({
+                    id: g.id,
+                    kind: 'goal',
+                    title: `Goal deadline: ${g.title}`,
+                    start: deadline,
+                    end: deadline,
+                    allDay: true,
+                    color: goalCategoryColors[g.category] || '#8b5cf6',
+                    icon: '🎯',
+                    sourceId: g.id,
+                    meta: { category: g.category }
+                });
             });
-            // Journal
-            if ((state.journalEntries || []).some(j => j.date === dateKey)) {
-                events.push({ type: 'journal', title: 'Journal Entry', color: 'bg-slate-400' });
-            }
+
+            events.sort((a, b) => a.start.localeCompare(b.start));
             return events;
+        }, [state.assignments, state.timetable, state.goals, state.subjects, getSubjectColor]);
+
+        // --- Visible date range per mode ---
+        const visibleRange = useMemo(() => {
+            const y = currentDate.getFullYear();
+            const m = currentDate.getMonth();
+            if (calMode === 'month') {
+                const first = new Date(y, m, 1);
+                const last = new Date(y, m + 1, 0);
+                return { start: first, end: last };
+            }
+            if (calMode === 'week') {
+                const ws = DateUtils.startOfWeek(currentDate, weekStartsOn);
+                return { start: ws, end: DateUtils.addDays(ws, 6) };
+            }
+            // agenda
+            return { start: new Date(), end: DateUtils.addDays(new Date(), agendaRange) };
+        }, [calMode, currentDate, weekStartsOn, agendaRange]);
+
+        // --- All events for the visible range (memoized) ---
+        const calendarEvents = useMemo(() => buildCalendarEvents(visibleRange.start, visibleRange.end), [buildCalendarEvents, visibleRange]);
+
+        // --- Events indexed by dateKey (memoized) ---
+        const eventsByDate = useMemo(() => {
+            const map = {};
+            calendarEvents.forEach(ev => {
+                const key = ev.start.substring(0, 10);
+                (map[key] = map[key] || []).push(ev);
+            });
+            return map;
+        }, [calendarEvents]);
+
+        // --- Navigation ---
+        const goToday = () => setCurrentDate(new Date());
+        const goPrev = () => {
+            if (calMode === 'month') {
+                setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() - 1, 1));
+            } else if (calMode === 'week') {
+                setCurrentDate(prev => DateUtils.addDays(prev, -7));
+            }
         };
-        
-        const daysInMonth = getDaysInMonth(currentYear, currentMonth);
-        const firstDay = getFirstDayOfMonth(currentYear, currentMonth);
-        
-        const prevMonth = () => {
-            if (currentMonth === 0) { setCurrentMonth(11); setCurrentYear(currentYear - 1); }
-            else setCurrentMonth(currentMonth - 1);
-            setSelectedDay(null);
+        const goNext = () => {
+            if (calMode === 'month') {
+                setCurrentDate(prev => new Date(prev.getFullYear(), prev.getMonth() + 1, 1));
+            } else if (calMode === 'week') {
+                setCurrentDate(prev => DateUtils.addDays(prev, 7));
+            }
         };
-        
-        const nextMonth = () => {
-            if (currentMonth === 11) { setCurrentMonth(0); setCurrentYear(currentYear + 1); }
-            else setCurrentMonth(currentMonth + 1);
-            setSelectedDay(null);
+
+        // --- "Open" action: navigate to source module ---
+        const handleOpenEvent = (ev) => {
+            setSelectedDateKey(null);
+            if (ev.kind === 'assignment' || ev.kind === 'exam') {
+                dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' });
+            } else if (ev.kind === 'timetable') {
+                dispatch({ type: ActionTypes.SET_VIEW, payload: 'study' });
+            } else if (ev.kind === 'goal') {
+                dispatch({ type: ActionTypes.SET_VIEW, payload: 'goals' });
+            }
         };
-        
-        const calendarDays = [];
-        for (let i = 0; i < firstDay; i++) calendarDays.push(null);
-        for (let d = 1; d <= daysInMonth; d++) calendarDays.push(d);
-        
-        const selectedDateKey = selectedDay 
-            ? `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(selectedDay).padStart(2, '0')}`
-            : null;
-        const selectedEvents = selectedDateKey ? getEventsForDay(selectedDateKey) : [];
-        
-        return (
-            <div className="space-y-6">
-                <div>
-                    <h2 className="text-2xl font-bold text-white mb-1">📅 Calendar</h2>
-                    <p className="text-slate-400 text-sm">View all your events in one place</p>
-                </div>
-                
-                {/* Month Navigation */}
-                <div className="flex items-center justify-between bg-slate-800/50 rounded-xl p-3 border border-slate-700">
-                    <button onClick={prevMonth} className="px-3 py-1 text-slate-400 hover:text-white" aria-label="Previous month">◀</button>
-                    <span className="font-bold text-white">{monthNames[currentMonth]} {currentYear}</span>
-                    <button onClick={nextMonth} className="px-3 py-1 text-slate-400 hover:text-white" aria-label="Next month">▶</button>
-                </div>
-                
-                {/* Calendar Grid */}
+
+        // --- Header label ---
+        const headerLabel = useMemo(() => {
+            const y = currentDate.getFullYear();
+            const m = currentDate.getMonth();
+            if (calMode === 'month') return `${monthNames[m]} ${y}`;
+            if (calMode === 'week') {
+                const ws = DateUtils.startOfWeek(currentDate, weekStartsOn);
+                const we = DateUtils.addDays(ws, 6);
+                return `${DateUtils.format(ws, { month: 'short', day: 'numeric' })} – ${DateUtils.format(we, { month: 'short', day: 'numeric', year: 'numeric' })}`;
+            }
+            return 'Agenda';
+        }, [calMode, currentDate, weekStartsOn]);
+
+        // --- MONTH VIEW ---
+        const renderMonth = () => {
+            const y = currentDate.getFullYear();
+            const m = currentDate.getMonth();
+            const daysInMonth = DateUtils.daysInMonth(y, m);
+            const firstDow = new Date(y, m, 1).getDay();
+            const offset = (firstDow - weekStartsOn + 7) % 7;
+            const cells = [];
+            for (let i = 0; i < offset; i++) cells.push(null);
+            for (let d = 1; d <= daysInMonth; d++) cells.push(d);
+
+            return (
                 <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-3">
                     <div className="grid grid-cols-7 gap-1 mb-2">
                         {dayNames.map(d => (
@@ -8280,26 +10003,29 @@
                         ))}
                     </div>
                     <div className="grid grid-cols-7 gap-1">
-                        {calendarDays.map((day, idx) => {
+                        {cells.map((day, idx) => {
                             if (!day) return <div key={`empty-${idx}`} />;
-                            const dateKey = `${currentYear}-${String(currentMonth + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-                            const events = getEventsForDay(dateKey);
-                            const isToday = dateKey === today;
-                            const isSelected = day === selectedDay;
-                            
+                            const dateKey = `${y}-${String(m + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+                            const dayEvents = eventsByDate[dateKey] || [];
+                            const isToday = dateKey === todayKey;
                             return (
-                                <button key={day} onClick={() => setSelectedDay(day === selectedDay ? null : day)}
-                                    className={`relative p-2 rounded-lg text-center text-sm transition-all ${
-                                        isSelected ? 'bg-indigo-500 text-white' :
-                                        isToday ? 'bg-indigo-500/20 text-indigo-400 font-bold' :
+                                <button key={day} onClick={() => setSelectedDateKey(dateKey)}
+                                    aria-label={`${monthNames[m]} ${day}${dayEvents.length ? `, ${dayEvents.length} events` : ''}`}
+                                    className={`relative p-1.5 rounded-lg text-center text-sm transition-all min-h-[3rem] ${
+                                        isToday ? 'bg-indigo-500/20 text-indigo-400 font-bold ring-1 ring-indigo-500/40' :
                                         'text-slate-300 hover:bg-slate-700'
                                     }`}>
-                                    {day}
-                                    {events.length > 0 && (
-                                        <div className="flex gap-0.5 justify-center mt-0.5">
-                                            {events.slice(0, 3).map((e, i) => (
-                                                <div key={i} className={`w-1 h-1 rounded-full ${e.color}`} />
+                                    <div>{day}</div>
+                                    {dayEvents.length > 0 && (
+                                        <div className="mt-0.5 space-y-0.5">
+                                            {dayEvents.slice(0, 3).map((ev, i) => (
+                                                <div key={i} className="text-[10px] leading-tight truncate rounded px-0.5" style={{ backgroundColor: ev.color + '33', color: ev.color }}>
+                                                    {ev.icon} {ev.title.length > 12 ? ev.title.substring(0, 12) + '…' : ev.title}
+                                                </div>
                                             ))}
+                                            {dayEvents.length > 3 && (
+                                                <div className="text-[9px] text-slate-400">+{dayEvents.length - 3} more</div>
+                                            )}
                                         </div>
                                     )}
                                 </button>
@@ -8307,35 +10033,210 @@
                         })}
                     </div>
                 </div>
-                
+            );
+        };
+
+        // --- WEEK VIEW ---
+        const renderWeek = () => {
+            const ws = DateUtils.startOfWeek(currentDate, weekStartsOn);
+            const days = Array.from({ length: 7 }, (_, i) => DateUtils.addDays(ws, i));
+            return (
+                <div className="space-y-2">
+                    {days.map(d => {
+                        const dateKey = DateUtils.toKey(d);
+                        const dayEvents = eventsByDate[dateKey] || [];
+                        const isToday = dateKey === todayKey;
+                        return (
+                            <div key={dateKey}
+                                className={`bg-slate-800/50 rounded-xl border p-3 cursor-pointer transition-all hover:bg-slate-800 ${isToday ? 'border-indigo-500/50' : 'border-slate-700'}`}
+                                onClick={() => setSelectedDateKey(dateKey)}
+                                role="button" tabIndex={0} aria-label={`${DateUtils.format(d, { weekday: 'long', month: 'short', day: 'numeric' })}${dayEvents.length ? `, ${dayEvents.length} events` : ''}`}
+                                onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setSelectedDateKey(dateKey); } }}>
+                                <div className="flex items-center gap-2 mb-2">
+                                    <span className={`text-xs font-semibold px-2 py-0.5 rounded ${isToday ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                        {DateUtils.format(d, { weekday: 'short', month: 'short', day: 'numeric' })}
+                                    </span>
+                                    {dayEvents.length > 0 && <span className="text-xs text-slate-400">{dayEvents.length} event{dayEvents.length !== 1 ? 's' : ''}</span>}
+                                </div>
+                                {dayEvents.length === 0 && <p className="text-xs text-slate-500">No events</p>}
+                                <div className="space-y-1">
+                                    {dayEvents.map((ev, i) => (
+                                        <div key={i} className="flex items-center gap-2 p-1.5 rounded-lg" style={{ backgroundColor: ev.color + '1a' }}>
+                                            <div className="w-1 h-6 rounded-full" style={{ backgroundColor: ev.color }} />
+                                            <div className="flex-1 min-w-0">
+                                                <div className="text-xs font-medium text-white truncate">{ev.icon} {ev.title}</div>
+                                                {!ev.allDay && <div className="text-[10px] text-slate-400">{formatTime(ev.meta?.startTime)} – {formatTime(ev.meta?.endTime)}</div>}
+                                            </div>
+                                            {ev.location && <span className="text-[10px] text-slate-400">📍 {ev.location}</span>}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
+            );
+        };
+
+        // --- AGENDA VIEW ---
+        const renderAgenda = () => {
+            const grouped = {};
+            calendarEvents.forEach(ev => {
+                const key = ev.start.substring(0, 10);
+                (grouped[key] = grouped[key] || []).push(ev);
+            });
+            const sortedDates = Object.keys(grouped).sort();
+            return (
+                <div className="space-y-3">
+                    <div className="flex items-center gap-2">
+                        <label className="text-xs text-slate-400" htmlFor="agenda-range">Show next</label>
+                        <select id="agenda-range" value={agendaRange} onChange={e => setAgendaRange(Number(e.target.value))}
+                            className="bg-slate-800 border border-slate-600 rounded-lg px-2 py-1 text-xs text-white">
+                            <option value={7}>7 days</option>
+                            <option value={30}>30 days</option>
+                            <option value={90}>90 days</option>
+                        </select>
+                    </div>
+                    {sortedDates.length === 0 && (
+                        <div className="text-center py-8 text-slate-400">
+                            <div className="text-3xl mb-2">📭</div>
+                            <p className="text-sm">No upcoming events in the next {agendaRange} days</p>
+                        </div>
+                    )}
+                    {sortedDates.map(dateKey => (
+                        <div key={dateKey} className="bg-slate-800/50 rounded-xl border border-slate-700 p-3">
+                            <div className="flex items-center gap-2 mb-2">
+                                <span className={`text-xs font-semibold px-2 py-0.5 rounded ${dateKey === todayKey ? 'bg-indigo-500 text-white' : 'bg-slate-700 text-slate-300'}`}>
+                                    {DateUtils.format(DateUtils.parseKey(dateKey), { weekday: 'short', month: 'short', day: 'numeric', year: 'numeric' })}
+                                </span>
+                            </div>
+                            <div className="space-y-1">
+                                {grouped[dateKey].map((ev, i) => (
+                                    <div key={i} className="flex items-center gap-2 p-2 rounded-lg hover:bg-slate-700/50 transition-colors" style={{ backgroundColor: ev.color + '0d' }}>
+                                        <div className="w-1.5 h-8 rounded-full" style={{ backgroundColor: ev.color }} />
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium text-white truncate">{ev.icon} {ev.title}</div>
+                                            <div className="text-[10px] text-slate-400">
+                                                {ev.allDay ? 'All day' : `${formatTime(ev.meta?.startTime)} – ${formatTime(ev.meta?.endTime)}`}
+                                                {ev.location ? ` · 📍 ${ev.location}` : ''}
+                                            </div>
+                                        </div>
+                                        <button onClick={(e) => { e.stopPropagation(); handleOpenEvent(ev); }}
+                                            className="text-xs px-2 py-1 bg-indigo-500/20 text-indigo-400 rounded-lg hover:bg-indigo-500/30 transition-colors"
+                                            aria-label={`Open ${ev.title}`}>
+                                            Open
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        };
+
+        // --- Day detail bottom-sheet modal ---
+        const renderDayModal = () => {
+            if (!selectedDateKey) return null;
+            const dayEvents = eventsByDate[selectedDateKey] || [];
+            const dateObj = DateUtils.parseKey(selectedDateKey);
+            return (
+                <div className="fixed inset-0 z-50 flex items-end justify-center" onClick={() => setSelectedDateKey(null)} role="dialog" aria-modal="true" aria-label="Day events">
+                    <div className="absolute inset-0 bg-black/60" />
+                    <div className="relative w-full max-w-lg bg-slate-900 rounded-t-2xl border-t border-slate-700 p-4 pb-8 max-h-[70vh] overflow-y-auto animate-slide-up"
+                        tabIndex={-1} ref={el => el && el.focus()}
+                        onClick={e => e.stopPropagation()} onKeyDown={e => { if (e.key === 'Escape') setSelectedDateKey(null); }}>
+                        <div className="w-10 h-1 bg-slate-600 rounded-full mx-auto mb-3" />
+                        <div className="flex items-center justify-between mb-4">
+                            <h3 className="font-bold text-white text-lg">
+                                {DateUtils.format(dateObj, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
+                            </h3>
+                            <button onClick={() => setSelectedDateKey(null)} className="text-slate-400 hover:text-white p-1" aria-label="Close day details">✕</button>
+                        </div>
+                        {dayEvents.length === 0 ? (
+                            <div className="text-center py-6">
+                                <div className="text-2xl mb-2">📭</div>
+                                <p className="text-slate-400 text-sm">No events on this day</p>
+                            </div>
+                        ) : (
+                            <div className="space-y-2">
+                                {dayEvents.map((ev, idx) => (
+                                    <div key={idx} className="flex items-center gap-3 p-3 rounded-xl border border-slate-700/50 transition-colors" style={{ backgroundColor: ev.color + '0d' }}>
+                                        <div className="w-1.5 self-stretch rounded-full" style={{ backgroundColor: ev.color }} />
+                                        <div className="text-xl">{ev.icon}</div>
+                                        <div className="flex-1 min-w-0">
+                                            <div className="text-sm font-medium text-white truncate">{ev.title}</div>
+                                            <div className="text-xs text-slate-400">
+                                                {ev.allDay ? 'All day' : `${formatTime(ev.meta?.startTime)} – ${formatTime(ev.meta?.endTime)}`}
+                                                {ev.location ? ` · 📍 ${ev.location}` : ''}
+                                            </div>
+                                            <div className="text-[10px] text-slate-500 capitalize mt-0.5">{ev.kind}</div>
+                                        </div>
+                                        <button onClick={() => handleOpenEvent(ev)}
+                                            className="text-xs px-3 py-1.5 bg-indigo-500 hover:bg-indigo-600 text-white rounded-lg transition-colors whitespace-nowrap"
+                                            aria-label={`Open ${ev.title} in ${ev.kind} view`}>
+                                            Open
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        )}
+                    </div>
+                </div>
+            );
+        };
+
+        return (
+            <div className="space-y-4">
+                <div>
+                    <h2 className="text-2xl font-bold text-white mb-1">📅 Calendar</h2>
+                    <p className="text-slate-400 text-sm">View all your events in one place</p>
+                </div>
+
+                {/* Mode Toggle */}
+                <div className="flex gap-1 bg-slate-800/50 p-1 rounded-xl">
+                    {[
+                        { id: 'month', label: 'Month', icon: '📆' },
+                        { id: 'week', label: 'Week', icon: '📋' },
+                        { id: 'agenda', label: 'Agenda', icon: '📃' }
+                    ].map(m => (
+                        <button key={m.id} onClick={() => setCalMode(m.id)}
+                            className={`flex-1 py-2 px-3 rounded-lg text-sm font-medium transition-all ${
+                                calMode === m.id ? 'bg-indigo-500 text-white' : 'text-slate-400 hover:text-white'
+                            }`}
+                            aria-label={`${m.label} view`} aria-pressed={calMode === m.id}>
+                            <span className="mr-1">{m.icon}</span>{m.label}
+                        </button>
+                    ))}
+                </div>
+
+                {/* Calendar Header */}
+                {calMode !== 'agenda' && (
+                    <div className="flex items-center justify-between bg-slate-800/50 rounded-xl p-3 border border-slate-700">
+                        <button onClick={goPrev} className="px-3 py-1 text-slate-400 hover:text-white transition-colors" aria-label={`Previous ${calMode}`}>◀</button>
+                        <div className="flex items-center gap-2">
+                            <span className="font-bold text-white text-sm">{headerLabel}</span>
+                            <button onClick={goToday} className="text-xs px-2 py-0.5 bg-indigo-500/20 text-indigo-400 rounded-md hover:bg-indigo-500/30 transition-colors" aria-label="Go to today">Today</button>
+                        </div>
+                        <button onClick={goNext} className="px-3 py-1 text-slate-400 hover:text-white transition-colors" aria-label={`Next ${calMode}`}>▶</button>
+                    </div>
+                )}
+
+                {/* View Content */}
+                {calMode === 'month' && renderMonth()}
+                {calMode === 'week' && renderWeek()}
+                {calMode === 'agenda' && renderAgenda()}
+
                 {/* Legend */}
                 <div className="flex flex-wrap gap-3 text-xs text-slate-400">
                     <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-blue-500" /> Assignment</span>
                     <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-rose-500" /> Exam</span>
                     <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-emerald-500" /> Class</span>
                     <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-purple-500" /> Goal</span>
-                    <span className="flex items-center gap-1"><div className="w-2 h-2 rounded-full bg-slate-400" /> Journal</span>
                 </div>
-                
-                {/* Selected Day Events */}
-                {selectedDay && (
-                    <div className="bg-slate-800/50 rounded-xl border border-slate-700 p-4">
-                        <h3 className="font-bold text-white mb-3">{monthNames[currentMonth]} {selectedDay}, {currentYear}</h3>
-                        {selectedEvents.length === 0 ? (
-                            <p className="text-slate-400 text-sm">No events on this day</p>
-                        ) : (
-                            <div className="space-y-2">
-                                {selectedEvents.map((event, idx) => (
-                                    <div key={idx} className="flex items-center gap-2 p-2 bg-slate-900/50 rounded-lg">
-                                        <div className={`w-2 h-2 rounded-full ${event.color}`} />
-                                        <span className="text-sm text-white">{event.title}</span>
-                                        <span className="text-xs text-slate-400 capitalize">{event.type === 'exam' ? '📝 Exam' : event.type === 'assignment' ? '📄 Assignment' : event.type === 'class' ? '📚 Class' : ''}</span>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
+
+                {/* Day Detail Bottom-Sheet Modal */}
+                {renderDayModal()}
             </div>
         );
     });
@@ -8630,6 +10531,33 @@
         // Keyboard shortcuts
         useKeyboardShortcuts(dispatch, state);
         
+        // Auto-end focus mode when time expires
+        useEffect(() => {
+            const fm = state.focusMode;
+            if (fm?.mode && fm.mode !== 'off' && fm.endsAt) {
+                const remaining = new Date(fm.endsAt) - new Date();
+                if (remaining <= 0) {
+                    dispatch({ type: ActionTypes.END_DEEP_WORK });
+                    showToast('Focus session ended');
+                } else {
+                    const timer = setTimeout(() => {
+                        dispatch({ type: ActionTypes.END_DEEP_WORK });
+                        showToast('Focus session complete! 🎉', 'success');
+                    }, remaining);
+                    return () => clearTimeout(timer);
+                }
+            }
+        }, [state.focusMode?.endsAt, state.focusMode?.mode, dispatch]);
+        
+        // Update focus banner every second (for countdown display)
+        const [, setTick] = useState(0);
+        useEffect(() => {
+            if (state.focusMode?.mode && state.focusMode.mode !== 'off' && state.focusMode?.endsAt) {
+                const interval = setInterval(() => setTick(t => t + 1), 1000);
+                return () => clearInterval(interval);
+            }
+        }, [state.focusMode?.mode, state.focusMode?.endsAt]);
+        
         // View components
         const viewComponents = {
             dashboard: DashboardPage,
@@ -8701,16 +10629,43 @@
                                     
                                     {/* Notification Bell */}
                                     <button
-                                        onClick={() => setShowNotifications(true)}
+                                        onClick={() => {
+                                            if (state.focusMode?.mode !== 'off' && state.focusMode?.mode && state.focusMode?.endsAt && new Date(state.focusMode.endsAt) > new Date()) {
+                                                showToast('Notifications silenced during focus mode');
+                                                return;
+                                            }
+                                            setShowNotifications(true);
+                                        }}
                                         className="relative p-2 text-slate-400 hover:text-white transition-colors"
                                         aria-label="Notifications"
                                     >
                                         <span className="text-lg">🔔</span>
-                                        {(state.notifications || []).filter(n => !n.read).length > 0 && (
+                                        {(state.notifications || []).filter(n => !n.read).length > 0 && (!state.focusMode?.mode || state.focusMode?.mode === 'off') && (
                                             <span className="absolute -top-0.5 -right-0.5 w-4 h-4 bg-rose-500 rounded-full text-xs text-white flex items-center justify-center">
                                                 {(state.notifications || []).filter(n => !n.read).length}
                                             </span>
                                         )}
+                                    </button>
+                                    
+                                    {/* Deep Work Toggle */}
+                                    <button
+                                        onClick={() => {
+                                            if (state.focusMode?.mode !== 'off' && state.focusMode?.mode) {
+                                                dispatch({ type: ActionTypes.END_DEEP_WORK });
+                                                showToast('Focus mode ended');
+                                            } else {
+                                                const mins = prompt('Deep Work duration (minutes):', '50');
+                                                if (!mins) return;
+                                                const m = parseInt(mins);
+                                                if (isNaN(m) || m < 1) return;
+                                                dispatch({ type: ActionTypes.START_DEEP_WORK, payload: { durationMinutes: m, mode: 'deepWork' }});
+                                                showToast(`Deep Work: ${m} min started`, 'success');
+                                            }
+                                        }}
+                                        className={`p-2 transition-colors ${state.focusMode?.mode !== 'off' && state.focusMode?.mode ? 'text-violet-400' : 'text-slate-400 hover:text-white'}`}
+                                        aria-label="Toggle Deep Work"
+                                    >
+                                        <span className="text-lg">🎯</span>
                                     </button>
                                     
                                     {/* Undo/Redo Buttons */}
@@ -8751,6 +10706,25 @@
                         </div>
                     </header>
                     
+                    {/* Deep Work Focus Banner */}
+                    {state.focusMode?.mode !== 'off' && state.focusMode?.mode && state.focusMode?.endsAt && (() => {
+                        const remaining = Math.max(0, Math.floor((new Date(state.focusMode.endsAt) - new Date()) / 1000));
+                        const mins = Math.floor(remaining / 60);
+                        const secs = remaining % 60;
+                        return remaining > 0 ? (
+                            <div className="bg-gradient-to-r from-violet-600/90 to-indigo-600/90 px-4 py-2 flex items-center justify-between">
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm">🎯</span>
+                                    <span className="text-white text-sm font-medium">
+                                        {state.focusMode.mode === 'deepWork' ? 'Deep Work' : 'Study Only'} — {mins}:{secs.toString().padStart(2, '0')} left
+                                    </span>
+                                </div>
+                                <button onClick={() => dispatch({ type: ActionTypes.END_DEEP_WORK })}
+                                    className="text-xs px-2 py-1 bg-white/20 text-white rounded hover:bg-white/30" aria-label="End focus mode">End</button>
+                            </div>
+                        ) : null;
+                    })()}
+                    
                     {/* Main Content */}
                     <main 
                         id="main-content"
@@ -8774,7 +10748,14 @@
                                     { id: 'analytics', icon: '📊', label: 'Stats' },
                                     { id: 'journal', icon: '📓', label: 'Journal' },
                                     { id: 'settings', icon: '⚙️', label: 'Settings' }
-                                ].map((item) => (
+                                ].filter(item => {
+                                    // Hide tabs during focus mode
+                                    const fm = state.focusMode;
+                                    if (fm?.mode && fm.mode !== 'off' && fm.endsAt && new Date(fm.endsAt) > new Date()) {
+                                        return !(fm.hideTabs || []).includes(item.id);
+                                    }
+                                    return true;
+                                }).map((item) => (
                                     <button
                                         key={item.id}
                                         onClick={() => dispatch({ type: ActionTypes.SET_VIEW, payload: item.id })}
