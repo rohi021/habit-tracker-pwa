@@ -433,6 +433,322 @@
     })();
 
     // ============================================================================
+    // SECTION 1C: SM-2 SPACED REPETITION ALGORITHM
+    // ============================================================================
+
+    /**
+     * SM-2 Algorithm Implementation
+     * Based on SuperMemo 2 by Piotr Wozniak
+     * 
+     * Equations:
+     * EF' = EF + (0.1 - (5 - q) * (0.08 + (5 - q) * 0.02))
+     * where q = quality of response (0-5)
+     * EF = max(1.3, EF')
+     * 
+     * If q >= 3 (correct):
+     *   n=0: interval = 1 day
+     *   n=1: interval = 6 days
+     *   n>1: interval = previous_interval * EF
+     * 
+     * If q < 3 (incorrect):
+     *   repetition = 0, interval = 1
+     *   Card enters "relearning" state
+     */
+    const SM2 = {
+        DEFAULT_EASE_FACTOR: 2.5,
+        MIN_EASE_FACTOR: 1.3,
+        
+        createCard(front, back) {
+            return {
+                id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                front,
+                back,
+                easeFactor: this.DEFAULT_EASE_FACTOR,
+                interval: 0,
+                repetition: 0,
+                nextReview: new Date().toISOString(),
+                state: 'new', // new, learning, review, relearning
+                lapses: 0,
+                createdAt: new Date().toISOString()
+            };
+        },
+        
+        processReview(card, quality) {
+            // quality: 0-5 (0=complete blackout, 5=perfect)
+            let { easeFactor, interval, repetition, lapses, state } = card;
+            
+            // Calculate new ease factor
+            const newEF = easeFactor + (0.1 - (5 - quality) * (0.08 + (5 - quality) * 0.02));
+            easeFactor = Math.max(this.MIN_EASE_FACTOR, newEF);
+            
+            if (quality >= 3) {
+                // Correct response
+                if (repetition === 0) {
+                    interval = 1;
+                    state = 'learning';
+                } else if (repetition === 1) {
+                    interval = 6;
+                    state = 'review';
+                } else {
+                    interval = Math.round(interval * easeFactor);
+                    state = 'review';
+                }
+                repetition++;
+            } else {
+                // Incorrect response
+                repetition = 0;
+                interval = 1;
+                lapses++;
+                state = card.state === 'new' ? 'learning' : 'relearning';
+            }
+            
+            const nextReview = new Date();
+            nextReview.setDate(nextReview.getDate() + interval);
+            
+            return {
+                ...card,
+                easeFactor,
+                interval,
+                repetition,
+                lapses,
+                state,
+                nextReview: nextReview.toISOString(),
+                lastReview: new Date().toISOString()
+            };
+        },
+        
+        getDueCards(cards) {
+            const now = new Date();
+            return cards.filter(c => new Date(c.nextReview) <= now)
+                .sort((a, b) => new Date(a.nextReview) - new Date(b.nextReview));
+        },
+        
+        getRetentionRate(cards) {
+            const reviewed = cards.filter(c => c.state !== 'new');
+            if (reviewed.length === 0) return 0;
+            const mature = reviewed.filter(c => c.interval >= 21);
+            return reviewed.length > 0 ? Math.round((mature.length / reviewed.length) * 100) : 0;
+        },
+        
+        getDueForecast(cards, days = 7) {
+            const forecast = [];
+            const now = new Date();
+            for (let i = 0; i < days; i++) {
+                const day = new Date(now);
+                day.setDate(day.getDate() + i);
+                const dayStr = day.toISOString().split('T')[0];
+                const count = cards.filter(c => {
+                    const review = new Date(c.nextReview).toISOString().split('T')[0];
+                    return review === dayStr;
+                }).length;
+                forecast.push({ date: dayStr, count });
+            }
+            return forecast;
+        }
+    };
+
+    // ============================================================================
+    // SECTION 1D: EBBINGHAUS FORGETTING CURVE & STUDY PLANNER ENGINE
+    // ============================================================================
+
+    /**
+     * Adaptive Study Planner
+     * Uses Ebbinghaus forgetting curve: R = e^(-t/S)
+     * where R = retention, t = time since last study (days), S = stability (strength of memory)
+     * 
+     * Subject priority = w1*deadline_urgency + w2*performance_gap + w3*decay_factor + w4*flashcard_retention
+     */
+    const StudyPlannerEngine = {
+        WEIGHTS: { deadline: 0.35, performance: 0.25, decay: 0.25, retention: 0.15 },
+        
+        /**
+         * Ebbinghaus retention: R = e^(-t/S)
+         * @param {number} daysSinceStudy - days since last study session
+         * @param {number} stability - memory strength (higher = slower decay), default 3
+         * @returns {number} retention probability 0-1
+         */
+        retention(daysSinceStudy, stability = 3) {
+            return Math.exp(-daysSinceStudy / stability);
+        },
+        
+        /**
+         * Calculate deadline urgency (0-1, higher = more urgent)
+         */
+        deadlineUrgency(assignments, subjectName) {
+            const now = new Date();
+            const upcoming = assignments.filter(a =>
+                a.subject === subjectName && a.status !== 'completed' && a.dueDate
+            );
+            if (upcoming.length === 0) return 0;
+            const nearest = upcoming.reduce((min, a) => {
+                const days = (new Date(a.dueDate) - now) / (1000 * 60 * 60 * 24);
+                return days < min ? days : min;
+            }, Infinity);
+            if (nearest <= 0) return 1;
+            if (nearest >= 30) return 0;
+            return Math.max(0, 1 - nearest / 30);
+        },
+        
+        /**
+         * Calculate performance gap (0-1, higher = worse performance)
+         */
+        performanceGap(grades, subjectName) {
+            if (!grades?.semesters) return 0.5;
+            for (const sem of grades.semesters) {
+                for (const course of (sem.courses || [])) {
+                    if (course.name === subjectName && course.assessments?.length > 0) {
+                        const avgScore = course.assessments.reduce((sum, a) => sum + (a.score / a.maxScore), 0) / course.assessments.length;
+                        return Math.max(0, 1 - avgScore);
+                    }
+                }
+            }
+            return 0.5;
+        },
+        
+        /**
+         * Get flashcard retention for a subject
+         */
+        subjectRetention(flashcardDecks, subjectName) {
+            const deck = (flashcardDecks || []).find(d => d.subject === subjectName);
+            if (!deck || !deck.cards?.length) return 1;
+            return SM2.getRetentionRate(deck.cards) / 100;
+        },
+        
+        /**
+         * Days since last study for a subject
+         */
+        daysSinceLastStudy(studySessions, subjectName) {
+            const sessions = (studySessions || []).filter(s => s.subject === subjectName);
+            if (sessions.length === 0) return 30;
+            const latest = sessions.reduce((max, s) => {
+                const d = new Date(s.date || s.startTime);
+                return d > max ? d : max;
+            }, new Date(0));
+            return Math.max(0, (new Date() - latest) / (1000 * 60 * 60 * 24));
+        },
+        
+        /**
+         * Calculate priority score for a subject
+         */
+        subjectPriority(subject, state) {
+            const name = typeof subject === 'string' ? subject : subject.name;
+            const du = this.deadlineUrgency(state.assignments || [], name);
+            const pg = this.performanceGap(state.grades, name);
+            const days = this.daysSinceLastStudy(state.studySessions, name);
+            const decay = 1 - this.retention(days);
+            const fr = 1 - this.subjectRetention(state.flashcardDecks, name);
+            
+            const score = this.WEIGHTS.deadline * du + this.WEIGHTS.performance * pg +
+                          this.WEIGHTS.decay * decay + this.WEIGHTS.retention * fr;
+            
+            return {
+                name,
+                score: Math.round(score * 100) / 100,
+                factors: {
+                    deadlineUrgency: Math.round(du * 100),
+                    performanceGap: Math.round(pg * 100),
+                    decayFactor: Math.round(decay * 100),
+                    retentionGap: Math.round(fr * 100),
+                    daysSinceStudy: Math.round(days)
+                }
+            };
+        },
+        
+        /**
+         * Generate weekly study plan
+         */
+        generateWeeklyPlan(state) {
+            const subjects = (state.subjects || []).map(s => typeof s === 'string' ? { name: s } : s);
+            if (subjects.length === 0) return [];
+            
+            const priorities = subjects.map(s => this.subjectPriority(s, state));
+            priorities.sort((a, b) => b.score - a.score);
+            
+            const totalScore = priorities.reduce((sum, p) => sum + p.score, 0) || 1;
+            const weeklyHours = (state.studyGoal?.weekly || 600) / 60;
+            const daysOfWeek = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
+            
+            const plan = [];
+            const today = new Date();
+            const todayDow = today.getDay();
+            
+            priorities.forEach((priority, idx) => {
+                const allocatedHours = Math.max(1, Math.round((priority.score / totalScore) * weeklyHours));
+                const sessionsPerWeek = Math.ceil(allocatedHours / 1.5); // 1.5h sessions
+                
+                for (let s = 0; s < sessionsPerWeek; s++) {
+                    const dayIdx = (s * 2 + idx) % 7;
+                    const sessionDate = new Date(today);
+                    const daysUntil = ((dayIdx + 1) - todayDow + 7) % 7 || 7;
+                    sessionDate.setDate(today.getDate() + (s === 0 && daysUntil > 7 ? 0 : daysUntil));
+                    
+                    plan.push({
+                        id: `plan-${Date.now()}-${idx}-${s}`,
+                        subject: priority.name,
+                        day: daysOfWeek[dayIdx],
+                        date: sessionDate.toISOString().split('T')[0],
+                        duration: Math.round(allocatedHours / sessionsPerWeek * 60),
+                        priority: priority.score,
+                        reasoning: this.generateReasoning(priority),
+                        completed: false,
+                        skipped: false
+                    });
+                }
+            });
+            
+            return plan.sort((a, b) => new Date(a.date) - new Date(b.date));
+        },
+        
+        generateReasoning(priority) {
+            const reasons = [];
+            const f = priority.factors;
+            if (f.deadlineUrgency > 60) reasons.push(`Deadline approaching (urgency: ${f.deadlineUrgency}%)`);
+            if (f.performanceGap > 50) reasons.push(`Performance needs improvement (gap: ${f.performanceGap}%)`);
+            if (f.decayFactor > 50) reasons.push(`${f.daysSinceStudy} days since last study (decay: ${f.decayFactor}%)`);
+            if (f.retentionGap > 40) reasons.push(`Flashcard retention declining (gap: ${f.retentionGap}%)`);
+            if (reasons.length === 0) reasons.push('Regular review to maintain knowledge');
+            return reasons.join('. ');
+        },
+        
+        /**
+         * Rebalance plan when sessions are skipped
+         */
+        rebalancePlan(plan, skippedSessionId, state) {
+            const skippedSession = plan.find(s => s.id === skippedSessionId);
+            if (!skippedSession) return plan;
+            
+            // Find the next available slot for the same subject
+            const remaining = plan.filter(s => !s.completed && !s.skipped && s.id !== skippedSessionId);
+            const sameSubject = remaining.filter(s => s.subject === skippedSession.subject);
+            
+            if (sameSubject.length > 0) {
+                // Add skipped duration to next session of same subject
+                return plan.map(s => {
+                    if (s.id === sameSubject[0].id) {
+                        return { ...s, duration: s.duration + skippedSession.duration, reasoning: s.reasoning + '. Extra time added from skipped session.' };
+                    }
+                    return s;
+                });
+            }
+            
+            // No same-subject session, add a new one
+            const newDate = new Date();
+            newDate.setDate(newDate.getDate() + 1);
+            return [...plan, {
+                id: `plan-rebal-${Date.now()}`,
+                subject: skippedSession.subject,
+                day: newDate.toLocaleDateString('en-US', { weekday: 'long' }),
+                date: newDate.toISOString().split('T')[0],
+                duration: skippedSession.duration,
+                priority: skippedSession.priority + 0.1,
+                reasoning: 'Rescheduled from skipped session',
+                completed: false,
+                skipped: false
+            }];
+        }
+    };
+
+    // ============================================================================
     // MOTIVATIONAL QUOTES (50+)
     // ============================================================================
     const MOTIVATIONAL_QUOTES = [
@@ -2103,6 +2419,13 @@
         achievements: [], // earned achievement IDs
         dailyChallenges: [], // { id, text, type, target, progress, completed, date, xpReward }
         
+        // ===== Flashcard System (SM-2) =====
+        flashcardDecks: [], // { id, name, subject, cards: [{ id, front, back, easeFactor, interval, repetition, nextReview, state, lapses, createdAt }], createdAt }
+        flashcardStats: {}, // { totalReviews, correctReviews, streakDays, lastReviewDate }
+        
+        // ===== Adaptive Study Planner =====
+        studyPlan: { weeklyPlan: [], lastGenerated: null, skippedSessions: [] },
+        
         // ===== Grade Tracker =====
         grades: {
             semesters: [] // { id, name, courses: [{ id, name, creditHours, assessments: [{ id, name, type, componentWeight, weight, score, maxScore }] }] }
@@ -2230,6 +2553,20 @@
         ADD_ASSESSMENT: 'ADD_ASSESSMENT',
         UPDATE_ASSESSMENT: 'UPDATE_ASSESSMENT',
         DELETE_ASSESSMENT: 'DELETE_ASSESSMENT',
+        
+        // Flashcard System
+        ADD_FLASHCARD_DECK: 'ADD_FLASHCARD_DECK',
+        DELETE_FLASHCARD_DECK: 'DELETE_FLASHCARD_DECK',
+        ADD_FLASHCARD: 'ADD_FLASHCARD',
+        UPDATE_FLASHCARD: 'UPDATE_FLASHCARD',
+        DELETE_FLASHCARD: 'DELETE_FLASHCARD',
+        REVIEW_FLASHCARD: 'REVIEW_FLASHCARD',
+        UPDATE_FLASHCARD_STATS: 'UPDATE_FLASHCARD_STATS',
+        
+        // Study Planner
+        GENERATE_STUDY_PLAN: 'GENERATE_STUDY_PLAN',
+        SKIP_STUDY_SESSION: 'SKIP_STUDY_SESSION',
+        COMPLETE_PLAN_SESSION: 'COMPLETE_PLAN_SESSION',
         
         // Notifications
         ADD_NOTIFICATION: 'ADD_NOTIFICATION',
@@ -3024,6 +3361,112 @@
                                     )
                                 }
                                 : sem
+                        )
+                    }
+                };
+            }
+            
+            // ===== FLASHCARD SYSTEM =====
+            case ActionTypes.ADD_FLASHCARD_DECK: {
+                return {
+                    ...state,
+                    flashcardDecks: [...(state.flashcardDecks || []), payload]
+                };
+            }
+            
+            case ActionTypes.DELETE_FLASHCARD_DECK: {
+                return {
+                    ...state,
+                    flashcardDecks: (state.flashcardDecks || []).filter(d => d.id !== payload.id)
+                };
+            }
+            
+            case ActionTypes.ADD_FLASHCARD: {
+                return {
+                    ...state,
+                    flashcardDecks: (state.flashcardDecks || []).map(d =>
+                        d.id === payload.deckId
+                            ? { ...d, cards: [...(d.cards || []), payload.card] }
+                            : d
+                    )
+                };
+            }
+            
+            case ActionTypes.UPDATE_FLASHCARD: {
+                return {
+                    ...state,
+                    flashcardDecks: (state.flashcardDecks || []).map(d =>
+                        d.id === payload.deckId
+                            ? { ...d, cards: (d.cards || []).map(c => c.id === payload.cardId ? { ...c, ...payload.updates } : c) }
+                            : d
+                    )
+                };
+            }
+            
+            case ActionTypes.DELETE_FLASHCARD: {
+                return {
+                    ...state,
+                    flashcardDecks: (state.flashcardDecks || []).map(d =>
+                        d.id === payload.deckId
+                            ? { ...d, cards: (d.cards || []).filter(c => c.id !== payload.cardId) }
+                            : d
+                    )
+                };
+            }
+            
+            case ActionTypes.REVIEW_FLASHCARD: {
+                const { deckId, cardId, quality } = payload; // quality: 0-5
+                return {
+                    ...state,
+                    flashcardDecks: (state.flashcardDecks || []).map(d =>
+                        d.id === deckId
+                            ? {
+                                ...d,
+                                cards: (d.cards || []).map(c => {
+                                    if (c.id !== cardId) return c;
+                                    return SM2.processReview(c, quality);
+                                })
+                            }
+                            : d
+                    )
+                };
+            }
+            
+            case ActionTypes.UPDATE_FLASHCARD_STATS: {
+                return {
+                    ...state,
+                    flashcardStats: { ...(state.flashcardStats || {}), ...payload }
+                };
+            }
+            
+            // ===== STUDY PLANNER =====
+            case ActionTypes.GENERATE_STUDY_PLAN: {
+                return {
+                    ...state,
+                    studyPlan: { ...state.studyPlan, weeklyPlan: payload.plan, lastGenerated: new Date().toISOString(), skippedSessions: [] }
+                };
+            }
+            
+            case ActionTypes.SKIP_STUDY_SESSION: {
+                return {
+                    ...state,
+                    studyPlan: {
+                        ...state.studyPlan,
+                        skippedSessions: [...(state.studyPlan?.skippedSessions || []), payload.sessionId],
+                        weeklyPlan: (state.studyPlan?.weeklyPlan || []).map(s =>
+                            s.id === payload.sessionId ? { ...s, skipped: true } : s
+                        )
+                    }
+                };
+            }
+            
+            case ActionTypes.COMPLETE_PLAN_SESSION: {
+                return {
+                    ...state,
+                    studyPlan: {
+                        ...state.studyPlan,
+                        weeklyPlan: (state.studyPlan?.weeklyPlan || []).map(s =>
+                            s.id === payload.sessionId ? { ...s, completed: true } : s
                         )
                     }
                 };
