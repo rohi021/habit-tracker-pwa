@@ -460,7 +460,7 @@
         
         createCard(front, back) {
             return {
-                id: `card-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+                id: `card-${Date.now()}-${Math.random().toString(36).slice(2, 11)}`,
                 front,
                 back,
                 easeFactor: this.DEFAULT_EASE_FACTOR,
@@ -683,7 +683,7 @@
                     sessionDate.setDate(today.getDate() + (s === 0 && daysUntil > 7 ? 0 : daysUntil));
                     
                     plan.push({
-                        id: `plan-${Date.now()}-${idx}-${s}`,
+                        id: `plan-${Date.now()}-${idx}-${s}-${Math.random().toString(36).slice(2, 7)}`,
                         subject: priority.name,
                         day: daysOfWeek[dayIdx],
                         date: sessionDate.toISOString().split('T')[0],
