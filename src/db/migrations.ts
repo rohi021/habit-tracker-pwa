@@ -1,5 +1,18 @@
 import { db, setKV, getKV } from './db';
 import type { AppData } from '../schemas/app.schema';
+import {
+  SubjectSchema,
+  StudySessionSchema,
+  AssignmentSchema,
+  ExpenseSchema,
+  TimetableEntrySchema,
+  GoalSchema,
+  JournalEntrySchema,
+  SleepLogSchema,
+  ExerciseLogSchema,
+  ResearchEntrySchema,
+} from '../schemas/app.schema';
+import { z } from 'zod';
 
 interface MigrationLog {
   step: string;
@@ -17,6 +30,19 @@ export async function migrateFromV3(): Promise<MigrationLog[] | null> {
 
   const logs: MigrationLog[] = [];
 
+  /** Safely validate and filter an array through a Zod schema, returning fully parsed items */
+  function validateArray<T>(items: unknown[], schema: z.ZodType<T>, label: string): T[] {
+    const valid: T[] = [];
+    for (const item of items) {
+      const result = schema.safeParse(item);
+      if (result.success) valid.push(result.data as T);
+    }
+    if (valid.length < items.length) {
+      logs.push({ step: `${label}: ${items.length - valid.length} invalid items skipped`, status: 'success', details: `${valid.length}/${items.length} valid` });
+    }
+    return valid;
+  }
+
   try {
     const v3: Record<string, unknown> = JSON.parse(raw);
     logs.push({ step: 'Parse v3 data', status: 'success' });
@@ -31,69 +57,70 @@ export async function migrateFromV3(): Promise<MigrationLog[] | null> {
       if (typeof s === 'string') return { id: crypto.randomUUID(), name: s, color: '#6366f1', icon: '📘', weeklyGoalHours: 0 };
       return s as Record<string, unknown>;
     });
-    if (normalizedSubjects.length > 0) {
-      await db.subjects.bulkPut(normalizedSubjects as never[]);
-      logs.push({ step: `Migrate ${normalizedSubjects.length} subjects`, status: 'success' });
+    const validSubjects = validateArray(normalizedSubjects, SubjectSchema, 'Subjects');
+    if (validSubjects.length > 0) {
+      await db.subjects.bulkPut(validSubjects as never[]);
+      logs.push({ step: `Migrate ${validSubjects.length} subjects`, status: 'success' });
     }
 
     // Migrate study sessions
-    const sessions = Array.isArray(v3.studySessions) ? v3.studySessions : [];
+    const sessions = validateArray(Array.isArray(v3.studySessions) ? v3.studySessions : [], StudySessionSchema, 'Study sessions');
     if (sessions.length > 0) {
       await db.studySessions.bulkPut(sessions as never[]);
       logs.push({ step: `Migrate ${sessions.length} study sessions`, status: 'success' });
     }
 
     // Migrate assignments
-    const assignments = Array.isArray(v3.assignments) ? v3.assignments : [];
+    const assignments = validateArray(Array.isArray(v3.assignments) ? v3.assignments : [], AssignmentSchema, 'Assignments');
     if (assignments.length > 0) {
       await db.assignments.bulkPut(assignments as never[]);
       logs.push({ step: `Migrate ${assignments.length} assignments`, status: 'success' });
     }
 
     // Migrate expenses
-    const expenses = Array.isArray(v3.expenses) ? v3.expenses : [];
+    const expenses = validateArray(Array.isArray(v3.expenses) ? v3.expenses : [], ExpenseSchema, 'Expenses');
     if (expenses.length > 0) {
       await db.expenses.bulkPut(expenses as never[]);
       logs.push({ step: `Migrate ${expenses.length} expenses`, status: 'success' });
     }
 
     // Migrate timetable
-    const timetable = Array.isArray(v3.timetable) ? v3.timetable : [];
+    const timetable = validateArray(Array.isArray(v3.timetable) ? v3.timetable : [], TimetableEntrySchema, 'Timetable');
     if (timetable.length > 0) {
       await db.timetable.bulkPut(timetable as never[]);
       logs.push({ step: `Migrate ${timetable.length} timetable entries`, status: 'success' });
     }
 
     // Migrate goals
-    const goals = Array.isArray(v3.goals) ? v3.goals : [];
+    const goals = validateArray(Array.isArray(v3.goals) ? v3.goals : [], GoalSchema, 'Goals');
     if (goals.length > 0) {
       await db.goals.bulkPut(goals as never[]);
       logs.push({ step: `Migrate ${goals.length} goals`, status: 'success' });
     }
 
     // Migrate journal entries
-    const journal = Array.isArray(v3.journalEntries) ? v3.journalEntries : [];
+    const journal = validateArray(Array.isArray(v3.journalEntries) ? v3.journalEntries : [], JournalEntrySchema, 'Journal');
     if (journal.length > 0) {
       await db.journalEntries.bulkPut(journal as never[]);
       logs.push({ step: `Migrate ${journal.length} journal entries`, status: 'success' });
     }
 
     // Migrate sleep log
-    const sleepLog = Array.isArray(v3.sleepLog) ? v3.sleepLog : [];
+    const sleepLog = validateArray(Array.isArray(v3.sleepLog) ? v3.sleepLog : [], SleepLogSchema, 'Sleep');
     if (sleepLog.length > 0) {
       await db.sleepLog.bulkPut(sleepLog as never[]);
       logs.push({ step: `Migrate ${sleepLog.length} sleep logs`, status: 'success' });
     }
 
     // Migrate exercise log
-    const exerciseLog = Array.isArray(v3.exerciseLog) ? v3.exerciseLog : [];
+    const exerciseLog = validateArray(Array.isArray(v3.exerciseLog) ? v3.exerciseLog : [], ExerciseLogSchema, 'Exercise');
     if (exerciseLog.length > 0) {
       await db.exerciseLog.bulkPut(exerciseLog as never[]);
       logs.push({ step: `Migrate ${exerciseLog.length} exercise logs`, status: 'success' });
     }
 
     // Migrate research log
-    const researchLog = Array.isArray(v3.researchLog) ? v3.researchLog : [];
+    const researchLog = validateArray(Array.isArray(v3.researchLog) ? v3.researchLog : [], ResearchEntrySchema, 'Research');
     if (researchLog.length > 0) {
       await db.researchLog.bulkPut(researchLog as never[]);
       logs.push({ step: `Migrate ${researchLog.length} research entries`, status: 'success' });
