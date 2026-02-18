@@ -88,7 +88,7 @@ export const DateUtils = {
     startOfWeek: (date, weekStartsOn = 0) => {
         const d = new Date(date);
         const day = d.getDay();
-        const diff = (day < weekStartsOn ? 7 : 0) + day - weekStartsOn;
+        const diff = (day - weekStartsOn + 7) % 7;
         d.setDate(d.getDate() - diff);
         d.setHours(0, 0, 0, 0);
         return d;
