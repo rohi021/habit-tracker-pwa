@@ -1,0 +1,46 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StudentOS — Tests</title>
+    <style>
+        body {
+            font-family: 'Courier New', monospace;
+            background: #0f172a;
+            color: #e2e8f0;
+            padding: 2rem;
+            margin: 0;
+        }
+        h1 { color: #818cf8; margin-bottom: 0.5rem; }
+        #test-output {
+            white-space: pre-wrap;
+            line-height: 1.6;
+            font-size: 14px;
+        }
+        .pass { color: #34d399; font-weight: bold; }
+        .fail { color: #fb7185; font-weight: bold; }
+    </style>
+</head>
+<body>
+    <h1>StudentOS — Test Suite</h1>
+    <pre id="test-output"></pre>
+
+    <script type="module">
+    import { summarize } from './test-harness.mjs';
+    import { reducerTests } from './reducer.test.mjs';
+    import { migrationTests } from './migration.test.mjs';
+
+    await reducerTests();
+    await migrationTests();
+
+    const code = summarize();
+    const el = document.getElementById('test-output');
+    if (code === 0) {
+        el.innerHTML += '\n<span class="pass">ALL TESTS PASSED ✓</span>\n';
+    } else {
+        el.innerHTML += '\n<span class="fail">SOME TESTS FAILED ✗</span>\n';
+    }
+    </script>
+</body>
+</html>
