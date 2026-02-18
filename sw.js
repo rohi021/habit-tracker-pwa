@@ -1,10 +1,14 @@
-const CACHE_VERSION = 'studentos-v3.0';
+const CACHE_VERSION = 'studentos-v3.1';
 const OFFLINE_URL = '/index.html';
 
 const ASSETS_TO_CACHE = [
   '/',
   '/index.html',
   '/manifest.json',
+  '/js/config.js',
+  '/js/dateUtils.js',
+  '/js/state.js',
+  '/js/migration.js',
   '/icons/icon-192.png.png',
   '/icons/icon-512.png.png',
   'https://cdn.tailwindcss.com',
